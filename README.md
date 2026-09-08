@@ -1,3 +1,5 @@
+<img width="1892" height="947" alt="image" src="https://github.com/user-attachments/assets/e8eb515f-e288-427b-bc9b-b461c8466ffa" />
+
 # econcompare
 
 **Interactive OLS-reference comparison for cross-sectional econometrics in R.**
