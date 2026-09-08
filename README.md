@@ -42,8 +42,6 @@ remotes::install_github(
 )
 ```
 
-Replace `YOUR_GITHUB_USERNAME` with the GitHub account that hosts the repository.
-
 Then load the package:
 
 ```r
