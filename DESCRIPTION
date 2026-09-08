@@ -1,0 +1,30 @@
+Package: econcompare
+Type: Package
+Title: OLS-Reference Econometric Model Comparison and Viewer
+Version: 0.6.0
+Authors@R: person("econcompare", "contributors", role = c("aut", "cre"), email = "maintainer@example.com")
+Description: A beta research-software toolkit for estimating and comparing cross-sectional
+    econometric models against an ordinary least squares reference. It provides a
+    programmatic interface, a lightweight HTML viewer, and an interactive Shiny
+    workspace for configuring estimators and inspecting coefficients, fit statistics,
+    diagnostics, and warnings. The current scope includes weighted and robust linear
+    estimation, instrumental variables, quantile regression, censored regression, and
+    sample-selection models. Missing or length-zero fit statistics are handled
+    explicitly rather than causing viewer failures.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.3.2
+Depends: R (>= 4.1.0)
+Suggests:
+    censReg,
+    estimatr,
+    fixest,
+    ivreg,
+    MASS,
+    quantreg,
+    rstudioapi,
+    sampleSelection,
+    shiny,
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
