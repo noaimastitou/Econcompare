@@ -2,7 +2,7 @@ Package: econcompare
 Type: Package
 Title: Econometric Model Comparison for Cross-Sectional and Time-Series Data
 Version: 0.11.0
-Authors@R: person("econcompare", "contributors", role = c("aut", "cre"), email = "maintainer@example.com")
+Authors@R: person("Noaïm", "ASTITOU", role = c("aut", "cre"), email = "noaimastitou.pro@gmail.com")
 Description: A research-software toolkit for exploring and comparing econometric models
     across cross-sectional and explanatory time-series settings. Cross-sectional models are
     grouped by dependent-variable objective. Time-series tools conservatively detect and audit
