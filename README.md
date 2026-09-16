@@ -1,161 +1,375 @@
-<img width="1892" height="947" alt="image" src="https://github.com/user-attachments/assets/e8eb515f-e288-427b-bc9b-b461c8466ffa" />
-
 # econcompare
 
-**Interactive OLS-reference comparison for cross-sectional econometrics in R.**
+**Outcome-aware econometric exploration for cross-sectional and explanatory time-series data in R.**
 
-`econcompare` is an experimental R package for estimating, standardising and comparing cross-sectional econometric models against an ordinary least squares reference. It combines a programmatic API with an interactive Shiny workspace so that model configuration, estimation choices, fit statistics, diagnostics and warnings can be inspected in one place.
+`econcompare` is a research-oriented R package for quickly exploring data, estimating a small set of candidate econometric models, and comparing their results in one interface before continuing the detailed analysis in dedicated R code.
 
-The package is designed for applied econometrics, research workflows and advanced teaching. The interactive interface is intentionally approachable, but it does not hide model assumptions or estimator-specific limitations.
+The package is intentionally **comparison-first rather than automation-first**. It does not choose the “best” model for the researcher, and OLS is no longer imposed as a universal benchmark.
 
-## Current scope
+## Model groups
 
-Version 0.6.0 focuses on **cross-sectional models whose results remain meaningfully interpretable relative to an OLS baseline**.
+Version 0.11.0 preserves outcome-aware cross-sectional comparison and extends explanatory time-series econometrics from static/dynamic/ARDL regressions to explicit ECM and multivariate VAR/VECM systems, while keeping lag order, deterministic terms and cointegration rank under researcher control.
 
-Supported engines currently include:
+### Continuous outcomes
 
-- Ordinary least squares (OLS)
-- Weighted least squares (WLS)
-- OLS with heteroskedasticity-robust standard errors
-- Robust M-estimation
-- OLS through `fixest::feols()`
-- Instrumental variables / 2SLS
-- Quantile regression
-- Tobit / censored regression
-- Heckman sample-selection models
+- Ordinary least squares (`ols`)
+- Weighted least squares (`wls`)
+- OLS with robust standard errors (`ols_robust`)
+- Robust M-estimation (`robust_m`)
+- OLS through `fixest::feols()` (`fixest`)
+- Instrumental variables / 2SLS (`ivreg`)
+- Quantile regression (`quantile`)
+- Tobit / censored regression (`tobit`)
+- Heckman sample-selection model (`heckman`)
 
-Use:
+### Binary outcomes
+
+- Linear probability model (`lpm`)
+- Logit (`logit`)
+- Probit (`probit`)
+
+For factor responses, the existing factor-level order determines the default 0/1 coding; for character responses, the event category must be supplied explicitly so econcompare does not make that substantive choice silently. Raw LPM, logit and probit coefficients are on different scales and should not be compared as if they were the same quantity. Use `eco_binary_compare()` for simple common in-sample prediction summaries.
+
+### Nominal categorical outcomes
+
+- Multinomial logit (`multinomial_logit`) via `nnet::multinom()`
+
+The first factor level is the reference category. Numeric outcomes are **never converted to categories automatically**. If numbers are substantive category codes, convert them explicitly with `factor()` before fitting the multinomial model. Coefficients are reported by non-reference outcome category.
+
+### Ordinal categorical outcomes
+
+- Ordered logit (`ordered_logit`)
+- Ordered probit (`ordered_probit`)
+
+The programmatic API requires the dependent variable to be an **ordered factor**. In the Shiny app, the user explicitly selects the category order before estimation, from lowest to highest. econcompare deliberately does not infer a substantive ordering from labels or numeric codes.
+
+Inspect the catalogue with:
 
 ```r
 eco_models()
+eco_models("binary")
+eco_models("ordinal")
 ```
-
-to inspect the catalogue, required packages and local availability.
 
 ## Installation from GitHub
 
-Until a CRAN release is available, install the development version from GitHub.
-
 ```r
 install.packages("remotes")
-remotes::install_github(
-  "noaimastitou/econcompare",
-  dependencies = TRUE
-)
+remotes::install_github("noaimastitou/Econcompare", dependencies = TRUE)
 ```
 
-Then load the package:
+Then:
 
 ```r
 library(econcompare)
 ```
 
-## Interactive econometrics workspace
-
-The simplest workflow is:
+## Interactive workflow
 
 ```r
 library(econcompare)
 eco_app(mtcars)
 ```
 
-The application opens an interactive workspace where you can:
+The app follows a deliberately simple sequence:
 
-1. choose the dependent variable and regressors;
-2. add models to the OLS reference specification;
-3. configure estimator-specific parameters;
-4. estimate all selected specifications;
-5. compare coefficients side by side;
-6. inspect fit statistics and diagnostics;
-7. review estimator warnings explicitly;
-8. preview the underlying data.
+1. explore the dataset;
+2. choose the dependent variable;
+3. choose whether the objective is continuous, binary, nominal categorical, or ordinal categorical;
+4. choose only models compatible with that objective;
+5. estimate and compare;
+6. run a small number of optional diagnostics when useful;
+7. continue the detailed econometric work outside econcompare.
 
-Contextual `?` helpers explain the econometric purpose of model-specific controls without replacing formal methodological judgement.
+The **Data explorer** remains intentionally lightweight: dimensions, missingness, simple variable summaries, distributions, a numeric scatterplot/correlation view, basic data-quality notices, and category counts/shares for binary, nominal and ordinal variables.
 
-## Programmatic workflow
+## Programmatic examples
 
-`econcompare` can also be used without the graphical interface.
+### Continuous
 
 ```r
-library(econcompare)
-
 fit <- eco_run(
-  data = mtcars,
-  formula = mpg ~ wt + hp,
-  models = c("ols", "ols_robust", "quantile"),
-  model_args = list(
-    ols_robust = list(se_type = "HC3"),
-    quantile = list(tau = c(0.25, 0.50, 0.75))
-  )
+  mtcars,
+  mpg ~ wt + hp,
+  models = c("ols", "ols_robust")
 )
 
 eco_compare(fit)
-eco_diagnostics(fit)
-eco_view(fit)
 ```
 
-OLS is automatically included when an alternative estimator is requested.
+OLS is not added automatically. If you want OLS, request it explicitly.
 
-## Instrumental variables example
+### Binary: LPM, logit and probit
 
 ```r
-fit_iv <- eco_run(
-  data = mtcars,
-  formula = mpg ~ wt + hp,
-  models = c("ols", "ivreg"),
-  iv_formula = mpg ~ wt + hp | wt + qsec
+d <- mtcars
+d$high_mpg <- as.integer(d$mpg > median(d$mpg))
+
+fit_bin <- eco_run(
+  d,
+  high_mpg ~ wt + hp,
+  models = c("lpm", "logit", "probit")
 )
 
-eco_view(fit_iv)
+eco_compare(fit_bin)
+eco_binary_compare(fit_bin)
 ```
 
-The example is only intended to demonstrate the API. The validity of `qsec` as an instrument is **not established** by the package or by this example. Instrument relevance and exclusion remain substantive econometric requirements.
-
-## Missing and estimator-specific statistics
-
-Not every estimator defines the same fit statistics. `econcompare` does not manufacture a common statistic when none exists.
-
-By default, unavailable or length-zero scalar statistics are normalised to `NA_real_` and listed in `unavailable_stats`:
+For character binary outcomes, choose the event explicitly:
 
 ```r
-eco_compare(fit, empty_stats = "na")
+d$high_label <- ifelse(d$high_mpg == 1, "high", "low")
+fit_char <- eco_run(
+  d,
+  high_label ~ wt + hp,
+  models = c("logit", "probit"),
+  binary_event = "high"
+)
 ```
 
-For package development or strict auditing, use:
+### Nominal categorical: multinomial logit
 
 ```r
-eco_compare(fit, empty_stats = "error")
+d <- mtcars
+d$gear_f <- factor(d$gear)
+
+fit_multi <- eco_run(
+  d,
+  gear_f ~ wt + hp,
+  models = "multinomial_logit"
+)
+
+eco_compare(fit_multi)
 ```
 
-This stops when an expected scalar statistic is returned with length zero.
-
-## Optional dependencies
-
-Some model engines rely on specialised packages. The principal optional dependencies are:
+### Ordinal categorical: ordered logit and probit
 
 ```r
-install.packages(c(
-  "shiny",
-  "estimatr",
-  "fixest",
-  "ivreg",
-  "quantreg",
-  "censReg",
-  "sampleSelection"
-))
+d <- mtcars
+d$gear_ord <- ordered(d$gear, levels = sort(unique(d$gear)))
+
+fit_ord <- eco_run(
+  d,
+  gear_ord ~ wt + hp,
+  models = c("ordered_logit", "ordered_probit")
+)
+
+eco_compare(fit_ord)
 ```
 
-`MASS` is used for robust M-estimation and is included with standard R distributions as a recommended package.
+
+## Explanatory time-series econometrics (0.11.0)
+
+`econcompare` does **not** aim to be a forecasting package. Time-series mode is designed to study relationships among variables observed over time. The workflow is: detect/confirm the time index, audit temporal structure, explore trajectories, choose an explicit lag specification, estimate, compare, and diagnose.
+
+```r
+d <- data.frame(
+  year = 2000:2025,
+  education_spending = rnorm(26),
+  unemployment = rnorm(26),
+  pisa_score = rnorm(26)
+)
+
+eco_data_structure(d)
+eco_time_audit(d, "year")
+
+fit <- eco_time_run(
+  d,
+  pisa_score ~ education_spending,
+  time = "year",
+  models = c("time_static", "distributed_lag", "dynamic_regression", "ardl"),
+  p = 1,
+  q = 2,
+  error_policy = "collect"
+)
+
+eco_compare(fit, error_policy = "collect")
+eco_time_diagnostics(fit, bg_order = 1)
+```
+
+Variable-specific explanatory lags are available programmatically while `q` remains the fallback for unspecified regressors:
+
+```r
+fit_lags <- eco_time_run(
+  d,
+  pisa_score ~ education_spending + unemployment,
+  time = "year",
+  models = "ardl",
+  p = 1,
+  q = 1,
+  q_by_var = c(education_spending = 4, unemployment = 1)
+)
+```
+
+ADF deterministic components are explicit research choices. ADF uses `urca` and reports its critical values directly; KPSS remains complementary rather than an automatic transformation rule:
+
+```r
+eco_stationarity_tests(
+  d,
+  variables = c("pisa_score", "education_spending"),
+  time = "year",
+  adf_k = 1,
+  adf_deterministic = "trend",
+  kpss_null = "Trend"
+)
+```
+
+Temporal detection is deliberately conservative. A date-like column does not automatically make a dataset a time series: duplicated or irregular event dates are flagged, ambiguous date strings are not guessed, and the Shiny app asks the researcher to confirm the econometric mode explicitly. Calendar monthly/quarterly/annual spacing is detected from calendar positions rather than fixed month lengths. Lagged models refuse gaps instead of treating the previous observed row as a one-period lag.
+
+### ECM
+
+`eco_ecm_run()` estimates a transparent two-step single-equation ECM. The first-step levels relationship is retained separately and is **not** treated as automatic proof of cointegration.
+
+```r
+ecm <- eco_ecm_run(
+  d,
+  pisa_score ~ education_spending + unemployment,
+  time = "year",
+  p = 1,
+  q = 0
+)
+
+eco_compare(ecm)          # short-run ECM
+eco_ecm_long_run(ecm)     # levels relationship used to build ECT
+```
+
+### VAR and VECM systems
+
+VAR/VECM use a separate system API because no variable is treated as the single privileged dependent variable.
+
+Use `eco_system_models()` to inspect the system engines and whether their optional dependencies are available locally.
+
+```r
+lag_evidence <- eco_var_lag_selection(
+  d,
+  c("pisa_score", "education_spending", "unemployment"),
+  time = "year",
+  lag_max = 4
+)
+
+var_fit <- eco_system_run(
+  d,
+  variables = c("pisa_score", "education_spending", "unemployment"),
+  time = "year",
+  model = "var",
+  p = 2
+)
+
+eco_compare(var_fit)
+eco_system_diagnostics(var_fit)
+```
+
+For VECM, inspect Johansen evidence first, then provide the rank explicitly:
+
+```r
+eco_johansen_test(
+  d,
+  c("pisa_score", "education_spending", "unemployment"),
+  time = "year",
+  K = 2,
+  type = "trace",
+  ecdet = "const"
+)
+
+vecm_fit <- eco_system_run(
+  d,
+  variables = c("pisa_score", "education_spending", "unemployment"),
+  time = "year",
+  model = "vecm",
+  p = 2,
+  rank = 1,
+  johansen_type = "trace",
+  ecdet = "const"
+)
+
+eco_vecm_rank_test(vecm_fit)
+eco_vecm_cointegration(vecm_fit)
+```
+
+`econcompare` deliberately does not convert Johansen statistics into an automatic rank choice and does not impose structural VAR identification or Cholesky ordering.
+
+If storage classes or automatic suggestions are unsuitable, researchers can apply explicit validated overrides in the Shiny sidebar or programmatically:
+
+```r
+d2 <- eco_apply_types(
+  d,
+  c(year = "time_year", education_spending = "continuous")
+)
+```
+
+Manual ordinal typing requires the substantive order explicitly:
+
+```r
+d_ord <- eco_apply_types(
+  data.frame(satisfaction = c("High", "Low", "Medium")),
+  c(satisfaction = "ordinal"),
+  ordinal_levels = list(satisfaction = c("Low", "Medium", "High"))
+)
+```
+
+Temporal coefficient inference can remain classical or use opt-in HAC/Newey-West standard errors:
+
+```r
+fit_hac <- eco_time_run(
+  d2,
+  pisa_score ~ education_spending,
+  time = "year",
+  models = "time_static",
+  inference = "HAC",
+  hac_lag = 2
+)
+```
+
+HAC requires the optional `sandwich` and `lmtest` packages. It changes coefficient inference, not the underlying OLS point estimates.
+
+## Robustness in 0.9.4
+
+Version 0.9.4 is a cross-section hardening release. It does not add new estimators. The Shiny layout now contains wide tables and multi-value controls within their columns, Data Explorer relationship plots handle zero-variance variables explicitly, and categorical plots use a more defensive layout for longer labels.
+
+Result extraction can also be isolated model by model:
+
+```r
+cmp <- eco_compare(fit, error_policy = "collect")
+attr(cmp, "extraction_warnings")
+attr(cmp, "extraction_failures")
+```
+
+The default `error_policy = "stop"` remains strict for programmatic use. The Shiny app and HTML viewer use collection internally so an extraction problem in one fitted alternative does not erase successful results from the others. IV setup now checks the minimum order condition in the interactive formula builder, and Heckman controls prevent the selection indicator from being reused as its own selection regressor.
+
+## Comparison philosophy
+
+`econcompare` only allows models from **one outcome group per comparison**. For example, `ols` and `logit` cannot be mixed in one `eco_run()` call.
+
+This is intentional. Different model families can estimate parameters on different scales. The package therefore presents coefficient tables and fit information without claiming that every raw coefficient magnitude is directly comparable.
+
+The goal is model exploration: understand how plausible alternatives behave, identify a specification worth investigating further, then continue with the original modelling package or your own R workflow.
+
+## Diagnostics
+
+Diagnostics remain optional and compatibility-aware. In the Shiny app, no diagnostic runs automatically. The continuous-outcome branch retains the validated cross-section checks from earlier versions. Binary logit/probit/LPM currently expose only simple coefficient-inference summaries in the interactive checklist; multinomial and ordered models intentionally have no automatic diagnostic checklist yet.
+
+```r
+eco_diagnostic_tests()
+eco_diagnostics(fit, tests = c("breusch_pagan", "reset"))
+```
+
+## Sample audit
+
+Sample comparison no longer assumes OLS is present. `eco_sample_audit()` uses the first successfully fitted model as a **technical sample anchor only**, or you can choose one explicitly:
+
+```r
+eco_sample_audit(fit_bin, reference = "logit")
+```
+
+This does not make that model an econometric benchmark.
 
 ## Project status
 
-`econcompare` is currently a **beta research software project**. The cross-sectional workflow is under active development. Time-series and panel-data extensions are intentionally outside the current scope and are planned as separate stages so that the cross-sectional interface and comparison logic can stabilise first.
+`econcompare` is research software. Version 0.11.0 combines the stable outcome-aware cross-sectional workflow with explanatory time-series tools covering temporal regression, distributed lags, dynamic regression, ARDL, ECM, VAR and VECM. The package intentionally prioritises a small, understandable and auditable workflow over forecasting automation or automatic model-selection rules.
 
-Before relying on the package in production or published empirical work, inspect estimator warnings, verify the underlying model assumptions and validate results against the original model package when appropriate.
+Version 0.11.0 should be treated as an advanced public beta until the package passes a local `devtools::check()` / `R CMD check` and the GitHub Actions matrix. ECM/VAR/VECM outputs should be interpreted together with their diagnostics; econcompare does not automatically select lag order, deterministic specification or cointegration rank.
 
-## Contributing
-
-Bug reports, reproducible examples, methodological suggestions and interface feedback are welcome. See [`CONTRIBUTING.md`](CONTRIBUTING.md).
+Before using results in published empirical work, inspect estimator warnings, verify assumptions and continue the final analysis with the underlying modelling package where appropriate.
 
 ## Licence
 

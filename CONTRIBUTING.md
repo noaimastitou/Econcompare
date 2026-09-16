@@ -15,11 +15,11 @@ Please include:
 
 ## Model contributions
 
-A new estimator should not be added only because an R implementation exists. The current design principle is that the estimator should have a clear and defensible relationship to the OLS reference specification used by `econcompare`.
+A new estimator should not be added only because an R implementation exists. The current design principle is that an estimator must belong to a clearly defined dependent-variable objective and have a defensible comparison role within that group. Raw coefficients must not be presented as directly comparable when model scales differ.
 
 A proposed model should therefore document:
 
-1. why comparison with the OLS baseline is meaningful;
+1. which dependent-variable objective the estimator belongs to and what quantities can be compared;
 2. which coefficients or marginal quantities are comparable;
 3. which fit statistics are valid and which are not;
 4. estimator-specific diagnostics that should be surfaced;

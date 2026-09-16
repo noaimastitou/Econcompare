@@ -1,11 +1,11 @@
 cff-version: 1.2.0
 message: "If you use econcompare in research, please cite the software repository and the version used."
-title: "econcompare: OLS-reference econometric model comparison in R"
+title: "econcompare: cross-sectional and explanatory time-series econometrics in R"
 type: software
-version: 0.6.0
-date-released: 2026-09-08
+version: 0.11.0
+date-released: 2026-09-16
 authors:
   - family-names: "Contributors"
     given-names: "econcompare"
 license: MIT
-repository-code: "https://github.com/noaimastitou/econcompare"
+repository-code: "https://github.com/noaimastitou/Econcompare"

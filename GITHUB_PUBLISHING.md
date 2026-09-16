@@ -1,30 +1,42 @@
-# Publishing econcompare on GitHub
+# Updating econcompare on GitHub
 
-This folder is structured as the root of the GitHub repository.
+This folder is prepared to replace the contents of the existing repository:
 
-## 1. Personalise repository metadata
+`https://github.com/noaimastitou/Econcompare`
 
-Before the first public push, replace `YOUR_GITHUB_USERNAME` in:
+The repository already exists. Do **not** create a new repository and do not overwrite the hidden `.git` directory in an existing local clone.
 
-- `README.md`
-- `CITATION.cff`
+## 1. Replace the repository files
 
-Also update `DESCRIPTION` with your real maintainer name and email. Do not publish the placeholder maintainer address as your final package metadata.
+If you use the GitHub web interface, upload the files and folders from this package root and replace files with the same names. Keep the repository structure unchanged, especially `R/`, `man/`, `tests/`, `inst/` and `.github/`.
 
-A typical `Authors@R` field looks like:
+If you use a local Git clone, copy the contents of this folder into the clone, replacing old files. Do not copy a `.git` directory from another location.
 
-```text
-Authors@R: person("Noaïm", "Astitou", role = c("aut", "cre"), email = "noaimastitou.pro@gmail.com")
+Then review the changes:
+
+```bash
+git status
+git diff --stat
 ```
 
-You may also add these fields to `DESCRIPTION`:
+## 2. Maintainer metadata
+
+`DESCRIPTION` deliberately still contains a placeholder maintainer identity/email because no real maintainer identity was supplied during package preparation:
 
 ```text
-URL: https://github.com/noaimastitou/econcompare
-BugReports: https://github.com/noaimastitou/econcompare/issues
+Authors@R: person("econcompare", "contributors", role = c("aut", "cre"), email = "maintainer@example.com")
 ```
 
-## 2. Test locally before publishing
+Replace this with the real maintainer name and email before a CRAN or other formal registry submission. Do not invent or publish personal metadata you do not want public.
+
+The repository URL and bug-report URL are already set to:
+
+```text
+URL: https://github.com/noaimastitou/Econcompare
+BugReports: https://github.com/noaimastitou/Econcompare/issues
+```
+
+## 3. Test locally before publishing a stable release
 
 From RStudio, open the package directory and run:
 
@@ -35,9 +47,7 @@ devtools::test()
 devtools::check()
 ```
 
-Do not treat the repository as release-ready until `devtools::check()` completes without errors. Review warnings and notes individually.
-
-Then install the local package and test the interactive application:
+Then install and launch the package:
 
 ```r
 devtools::install()
@@ -45,43 +55,32 @@ library(econcompare)
 eco_app(mtcars)
 ```
 
-## 3. Create the GitHub repository
+Version 0.11.0 adds ECM, VAR and VECM, so also exercise the advanced time-series paths with `urca` and `vars` installed.
 
-On GitHub:
+## 4. Commit and push
 
-1. Create a new repository named `econcompare`.
-2. Prefer a public repository if external users should install it directly.
-3. Do **not** initialise it with another README, `.gitignore` or licence, because this package folder already contains them.
-
-## 4. Push using Git
-
-Open a terminal in the `econcompare` folder and run:
+After reviewing `git status` and the local checks:
 
 ```bash
-git init
 git add .
-git commit -m "Initial public beta of econcompare"
-git branch -M main
-git remote add origin https://github.com/YOUR_GITHUB_USERNAME/econcompare.git
-git push -u origin main
+git commit -m "Release 0.11.0: ECM VAR and VECM support"
+git push origin main
 ```
 
-Alternatively, GitHub Desktop can be used to create a repository from this existing local folder and publish it.
+If the repository uses a different default branch, replace `main` accordingly.
 
 ## 5. Check GitHub Actions
 
-After the push, open the repository's **Actions** tab. The included `R-CMD-check` workflow runs package checks on current release R for Linux, Windows and macOS.
-
-A green workflow does not replace methodological validation, but it is a useful software-quality gate for future changes.
+Open the repository **Actions** tab after the push. The included `R-CMD-check` workflow is an additional software-quality gate. Review errors, warnings and notes rather than treating a green badge as econometric validation.
 
 ## 6. External installation
 
-Once the repository is public, users can install it with:
+Once pushed, users can install the GitHub version with:
 
 ```r
 install.packages("remotes")
 remotes::install_github(
-  "YOUR_GITHUB_USERNAME/econcompare",
+  "noaimastitou/Econcompare",
   dependencies = TRUE
 )
 ```
@@ -93,26 +92,17 @@ library(econcompare)
 eco_app(mtcars)
 ```
 
-## 7. Create a versioned GitHub release
+## 7. Versioned release
 
-When the repository is stable enough for a public beta release:
+Only after the checks are satisfactory, create the tag:
 
 ```bash
-git tag -a v0.6.0 -m "econcompare 0.6.0 public beta"
-git push origin v0.6.0
+git tag -a v0.11.0 -m "econcompare 0.11.0 advanced time-series release"
+git push origin v0.11.0
 ```
 
-Then use **GitHub → Releases → Draft a new release**, select `v0.6.0`, and summarise the changes from `NEWS.md`.
+Then use **GitHub → Releases → Draft a new release**, select `v0.11.0`, and summarise the changes from `NEWS.md`.
 
-## 8. Recommended repository settings
+## 8. Important validation limitation
 
-For a public research-software project:
-
-- enable Issues for bug reports and methodological suggestions;
-- enable Discussions if you want longer methodological conversations outside Issues;
-- protect the `main` branch once collaborators begin contributing;
-- require the R-CMD-check workflow before merging pull requests when the project becomes collaborative.
-
-## 9. Important limitation of this prepared version
-
-This package structure was assembled in an environment without an R installation, so an actual local `R CMD check` could not be run before delivery. Your local `devtools::check()` and the included GitHub Actions workflow are therefore mandatory validation steps before presenting v0.6.0 as a tested release.
+This prepared package was assembled and statically audited in an environment without R/Rscript. An actual `R CMD check` could therefore not be run here. Your local `devtools::check()` and the GitHub Actions workflow remain required before describing v0.11.0 as runtime-tested or stable.
