@@ -19,3 +19,5 @@ eco_ecm_run(data, formula, time, p = 1L, q = 0L, q_by_var = NULL,
 }
 \value{An \code{econcompare} object containing the short-run ECM, the first-step long-run regression, the error-correction term and temporal metadata.}
 \description{Fits a transparent two-step ECM. The first-step levels regression is used to construct the lagged error-correction term but is not treated as proof of cointegration.}
+
+\section{Specification safeguards}{The response must be a single named numeric column; precompute transformations in the input data. Input formulas without an intercept are rejected explicitly. In ECM, use long_run_intercept = FALSE for the first-step intercept. Collisions between generated lag/difference names are rejected before estimation. The provenance component records requested and fitted formulas and engine versions.}

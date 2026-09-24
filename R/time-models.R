@@ -33,14 +33,17 @@ eco_time_models <- function() {
 .ec_time_formula_parts <- function(formula, data) {
   tt <- stats::terms(formula, data = data)
   if (attr(tt, "response") != 1L) .ec_stop("Time-series models require a formula with one dependent variable.")
+  if (!is.symbol(formula[[2L]])) .ec_stop("The response must be one named column. Precompute transformations such as log(y) in the data.")
+  if (attr(tt, "intercept") != 1L) .ec_stop("Temporal formulas require an intercept. For ECM use long_run_intercept = FALSE to remove the long-run intercept explicitly.")
   y <- all.vars(formula[[2L]])
   if (length(y) != 1L || !y %in% names(data)) .ec_stop("The time-series dependent variable must be one data column.")
   x <- attr(tt, "term.labels")
   vars <- all.vars(stats::delete.response(tt))
   if (!length(vars)) .ec_stop("Choose at least one explanatory variable for time-series econometrics.")
-  if (!all(x %in% names(data)) || !setequal(x, vars)) {
+  if (!all(x %in% c(names(data), vapply(names(data), .ec_quote_name, character(1)))) || length(x) != length(vars)) {
     .ec_stop("Time-series lag construction requires simple column names on the right-hand side. Create transformations explicitly in the data first.")
   }
+  x <- vars
   if (!is.numeric(data[[y]])) .ec_stop("Time-series regression requires a numeric dependent variable. Use an explicit type override if the variable is numerically stored as text.")
   nonnum <- x[!vapply(data[x], is.numeric, logical(1))]
   if (length(nonnum)) .ec_stop("Time-series regressors must be numeric. Non-numeric regressor(s): ", paste(nonnum, collapse = ", "), ".")
@@ -51,8 +54,8 @@ eco_time_models <- function() {
   if (length(k) != 1L || !(is.numeric(k) || is.integer(k)) || is.na(k) || !is.finite(k) || abs(k - round(k)) > 1e-8 || k < 0) {
     .ec_stop("`", name, "` must be one non-negative integer.")
   }
-  k <- as.integer(k)
   if (k > max_allowed) .ec_stop("`", name, "` = ", k, " is too large for this dataset. Maximum allowed here is ", max_allowed, ".")
+  k <- as.integer(k)
   k
 }
 
@@ -112,6 +115,9 @@ eco_time_models <- function() {
   p <- .ec_validate_lag_order(p, "p", max_allowed)
   q_spec <- .ec_normalize_q_by_var(parts$x, q, q_by_var, max_allowed)
 
+  generated <- c(if (p > 0L) paste0(parts$y, "_L", seq_len(p)) else character(),
+    unlist(lapply(parts$x, function(v) if (q_spec[[v]] > 0L) paste0(v, "_L", seq_len(q_spec[[v]])) else character()), use.names = FALSE))
+  .ec_validate_generated_names(c(parts$y, if (include_x0) parts$x else character(), generated))
   d <- data.frame(.ec_y = prep$data[[parts$y]], check.names = FALSE)
   names(d)[1L] <- parts$y
   if (p > 0L) {
@@ -135,7 +141,7 @@ eco_time_models <- function() {
   }
 
   rhs <- c(if (p > 0L) paste0(parts$y, "_L", seq_len(p)) else character(), xterms)
-  f <- stats::reformulate(rhs, response = parts$y)
+  f <- stats::reformulate(vapply(rhs, .ec_quote_name, character(1)), response = .ec_quote_name(parts$y))
   rownames(d) <- rownames(prep$data)
   cc <- stats::complete.cases(d)
   n_eff <- sum(cc)
@@ -383,6 +389,7 @@ eco_time_run <- function(data, formula, time, models = "time_static", p = 1L, q 
     ordinal_levels = attr(data, "econcompare_ordinal_levels"),
     data_n = nrow(data), created = Sys.time(), version = .ec_version()
   )
+  out$provenance <- .ec_provenance(out)
   class(out) <- "econcompare"
   out
 }

@@ -27,3 +27,8 @@ export(eco_system_run)
 export(eco_system_diagnostics)
 export(eco_vecm_cointegration)
 export(eco_vecm_rank_test)
+
+export(eco_panel_audit)
+export(eco_panel_models)
+export(eco_panel_run)
+export(eco_panel_diagnostics)

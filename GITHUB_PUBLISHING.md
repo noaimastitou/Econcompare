@@ -1,108 +1,71 @@
-# Updating econcompare on GitHub
+# Validating and publishing econcompare 0.14.4
 
-This folder is prepared to replace the contents of the existing repository:
+The maintainer metadata is set to Noaïm ASTITOU, noaimastitou.pro@gmail.com.
+The source folder is the repository root. No publication has been performed.
 
-`https://github.com/noaimastitou/Econcompare`
+The current release gate and audit-fix mapping are in VALIDATION_0.14.4.md.
 
-The repository already exists. Do **not** create a new repository and do not overwrite the hidden `.git` directory in an existing local clone.
+## Required local validation
 
-## 1. Replace the repository files
-
-If you use the GitHub web interface, upload the files and folders from this package root and replace files with the same names. Keep the repository structure unchanged, especially `R/`, `man/`, `tests/`, `inst/` and `.github/`.
-
-If you use a local Git clone, copy the contents of this folder into the clone, replacing old files. Do not copy a `.git` directory from another location.
-
-Then review the changes:
-
-```bash
-git status
-git diff --stat
-```
-
-## 2. Maintainer metadata
-
-`DESCRIPTION` deliberately still contains a placeholder maintainer identity/email because no real maintainer identity was supplied during package preparation:
-
-```text
-Authors@R: person("econcompare", "contributors", role = c("aut", "cre"), email = "maintainer@example.com")
-```
-
-Replace this with the real maintainer name and email before a CRAN or other formal registry submission. Do not invent or publish personal metadata you do not want public.
-
-The repository URL and bug-report URL are already set to:
-
-```text
-URL: https://github.com/noaimastitou/Econcompare
-BugReports: https://github.com/noaimastitou/Econcompare/issues
-```
-
-## 3. Test locally before publishing a stable release
-
-From RStudio, open the package directory and run:
+Open the extracted econcompare directory in RStudio. Verify the source version,
+not just the installed package version. Run:
 
 ```r
-install.packages(c("devtools", "testthat"))
-devtools::document()
+stopifnot(read.dcf("DESCRIPTION")[1, "Version"] == "0.14.4")
+install.packages(c("devtools", "testthat", "tibble", "vars", "urca",
+                   "sandwich", "lmtest", "shiny", "plm", "survival", "fixest"))
 devtools::test()
 devtools::check()
 ```
 
-Then install and launch the package:
+Install any other missing suggested packages reported by check. Investigate all
+errors, warnings, notes and skipped stabilization tests. Rd documentation is maintained directly; document() is not required to run these tests.
+If regenerating documentation, review the resulting diff.
+
+## Install and verify the application
 
 ```r
-devtools::install()
+devtools::install(upgrade = "never")
+# Restart R before loading the newly installed package.
 library(econcompare)
-eco_app(mtcars)
+stopifnot(packageVersion("econcompare") == "0.14.4")
+d <- read.csv(system.file("extdata", "econcompare_temporal_silicon_sample.csv",
+                          package = "econcompare"))
+d$date <- as.Date(d$date)
+eco_app(d)
 ```
 
-Version 0.11.0 adds ECM, VAR and VECM, so also exercise the advanced time-series paths with `urca` and `vars` installed.
+Check the panel tutorial and Shiny flow, the eight original linear estimators and all three new adapters, each with its own outcome family, absorption, singleton removal, cluster inference and diagnostic unavailable states. Also check ECM, VAR, VECM, Johansen labels, companion roots, serial-correlation output,
+and errors for constant/collinear systems. A diagnostic rejection is not itself
+an implementation failure. Confirm that no coefficient silently disappears.
 
-## 4. Commit and push
+## CI and release
 
-After reviewing `git status` and the local checks:
+The workflow includes Windows/macOS release and Linux release/oldrel/devel.
+It explicitly requires the stabilization-test dependencies. Run the workflow on
+the actual repository and inspect the results before making a release.
 
-```bash
-git add .
-git commit -m "Release 0.11.0: ECM VAR and VECM support"
-git push origin main
-```
+Only after local checks, application checks and CI are accepted, create the
+v0.14.4 tag and GitHub release. Set date-released in CITATION.cff to the actual
+publication date. Do not describe this source delivery as a certified release:
+R was unavailable in the preparation environment, so no R test suite or
+R CMD check result for 0.14.4 was obtained there.
 
-If the repository uses a different default branch, replace `main` accordingly.
+## Dépôt de ce dossier sur GitHub
 
-## 5. Check GitHub Actions
+Le contenu du dossier Econcompare doit être placé directement à la racine du
+ dépôt noaimastitou/Econcompare : DESCRIPTION, R/, man/, inst/ et tests/ doivent
+ y être directement visibles. Ne déposer ni le ZIP, ni un sous-dossier Econcompare
+ à l'intérieur du dépôt. Conserver .github/, .Rbuildignore et .gitignore.
 
-Open the repository **Actions** tab after the push. The included `R-CMD-check` workflow is an additional software-quality gate. Review errors, warnings and notes rather than treating a green badge as econometric validation.
+Le dossier contient plus de 100 fichiers : pour un dépôt depuis le navigateur,
+utiliser deux envois sur la même branche (d'abord R/, man/, inst/, tests/ ; puis
+les autres fichiers et .github/). GitHub Desktop permet de préparer un seul commit
+après copie de l'ensemble du contenu dans un clone local du dépôt.
 
-## 6. External installation
+Avant la release v0.14.4, exécuter les contrôles ci-dessus et vérifier Actions.
+Le code peut être déposé sur une branche de validation avant ces contrôles ; cela
+ne constitue pas une certification de stabilité ni une publication CRAN.
 
-Once pushed, users can install the GitHub version with:
-
-```r
-install.packages("remotes")
-remotes::install_github(
-  "noaimastitou/Econcompare",
-  dependencies = TRUE
-)
-```
-
-Then:
-
-```r
-library(econcompare)
-eco_app(mtcars)
-```
-
-## 7. Versioned release
-
-Only after the checks are satisfactory, create the tag:
-
-```bash
-git tag -a v0.11.0 -m "econcompare 0.11.0 advanced time-series release"
-git push origin v0.11.0
-```
-
-Then use **GitHub → Releases → Draft a new release**, select `v0.11.0`, and summarise the changes from `NEWS.md`.
-
-## 8. Important validation limitation
-
-This prepared package was assembled and statically audited in an environment without R/Rscript. An actual `R CMD check` could therefore not be run here. Your local `devtools::check()` and the GitHub Actions workflow remain required before describing v0.11.0 as runtime-tested or stable.
+Référence pour le dépôt web :
+https://docs.github.com/en/repositories/working-with-files/managing-files/adding-a-file-to-a-repository

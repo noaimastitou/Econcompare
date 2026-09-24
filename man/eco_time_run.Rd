@@ -20,3 +20,5 @@ eco_time_run(data, formula, time, models = "time_static", p = 1L, q = 1L,
 }
 \value{An object of class \code{econcompare} with \code{analysis_type = "time_series"}, model-specific lag metadata, and a structured \code{time_metadata} component.}
 \description{Fits explanatory temporal regressions. Lagged engines require a complete regular calendar grid so a lag always means a true period lag rather than merely the previous observed row.}
+
+\section{Specification safeguards}{The response must be a single named numeric column; precompute transformations in the input data. Input formulas without an intercept are rejected explicitly. In ECM, use long_run_intercept = FALSE for the first-step intercept. Collisions between generated lag/difference names are rejected before estimation. The provenance component records requested and fitted formulas and engine versions.}

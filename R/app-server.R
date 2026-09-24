@@ -87,6 +87,7 @@
       si <- active_structure()
       label <- switch(si$structure,
         time_series = "time series",
+        panel_candidate = "possible panel (confirm indexes)",
         cross_section = "cross-sectional",
         ambiguous_temporal = "ambiguous temporal structure",
         si$structure
@@ -152,14 +153,15 @@
       for (nm in names(show)) if (is.logical(show[[nm]])) show[[nm]] <- ifelse(is.na(show[[nm]]), "NA", ifelse(show[[nm]], "Yes", "No"))
       shiny::tagList(
         shiny::p(class = "ec-field-caption", paste0("Time audit: ", aud$frequency, "; ", aud$unique_time, " unique time points; ", aud$duplicate_time, " duplicate(s); ", aud$missing_time, " missing time value(s).")),
-        if (aud$duplicate_time > 0L) shiny::div(class = "ec-status ec-warn", "Repeated time points are not treated as a single time series. They may indicate panel/longitudinal data, which will be implemented separately."),
+        if (aud$duplicate_time > 0L) shiny::div(class = "ec-status ec-warn", "Repeated time points are not treated as a single time series. They may indicate panel data: choose Panel data econometrics and explicitly select individual/time indexes."),
         if (!isTRUE(aud$regular_spacing) || (!is.na(aud$missing_periods) && aud$missing_periods > 0L)) shiny::div(class="ec-status ec-warn", "The time grid is irregular or contains missing periods. Lagged models are blocked because an observation lag would not necessarily equal one calendar-period lag."),
         if (!isTRUE(aud$sorted_ascending)) shiny::div(class = "ec-field-caption", "Rows are not currently sorted by time. econcompare will sort an internal estimation copy; your original data are not modified.")
       )
     })
 
-    shiny::observeEvent(list(input$y, input$analysis_mode, input$time_var), {
+    shiny::observeEvent(list(input$y, input$analysis_mode, input$time_var, input$panel_id, input$panel_time), {
       excluded <- input$y
+      if (identical(input$analysis_mode, "panel")) excluded <- c(excluded, input$panel_id, input$panel_time)
       if (identical(input$analysis_mode, "time_series") && !is.null(input$time_var) && nzchar(input$time_var)) excluded <- c(excluded, input$time_var)
       shiny::updateSelectizeInput(session, "x", choices = setdiff(all_vars, excluded), server = TRUE)
       dat <- active_data(); detected <- .ec_outcome_type(dat[[input$y]])
@@ -264,7 +266,28 @@
       )
     })
   
+    output$panel_audit_ui <- shiny::renderUI({
+      if (!identical(input$analysis_mode, "panel")) return(NULL)
+      if (is.null(input$panel_id) || !nzchar(input$panel_id) || is.null(input$panel_time) || !nzchar(input$panel_time)) {
+        candidates <- .ec_panel_candidates(active_data())
+        return(shiny::p(class = "ec-note", if (nrow(candidates)) paste("Possible indexes to confirm:", paste(paste(candidates$id, candidates$time, sep = " + "), collapse = "; ")) else "Choose the individual and period indexes explicitly."))
+      }
+      a <- tryCatch(eco_panel_audit(active_data(), input$panel_id, input$panel_time), error = function(e) e)
+      if (inherits(a, "error")) return(shiny::div(class = "ec-status ec-error", conditionMessage(a)))
+      shiny::tagList(.ec_panel_summary_ui(a),
+        if (nrow(a$issues)) shiny::div(class = "ec-status ec-error", "Each individual-period pair must be unique and non-missing. For quarterly data, select a date or year-quarter index rather than year alone."))
+    })
+
     output$model_selector <- shiny::renderUI({
+      if (identical(input$analysis_mode, "panel")) {
+        z <- eco_panel_models()
+        family <- if (is.null(input$panel_outcome)) "continuous" else input$panel_outcome
+        z <- z[z$outcome_type == family, , drop = FALSE]
+        defaults <- switch(family, binary = "panel_clogit", count = "panel_poisson", c("panel_pooling", "panel_fe_individual"))
+        return(shiny::tagList(
+          shiny::checkboxGroupInput("models", NULL, choices = stats::setNames(z$engine, z$estimator), selected = defaults),
+          if (!all(z$available)) shiny::p(paste("Missing optional engines:", paste(unique(z$package[!z$available]), collapse = ", ")))))
+      }
       if (identical(input$analysis_mode, "time_series")) {
         fam <- if (is.null(input$time_family)) "single" else input$time_family
         if (identical(fam, "ecm")) {
@@ -303,12 +326,14 @@
     shiny::observeEvent(input$reset, {
       type_state$overrides <- character(); type_state$error <- NULL
       shiny::updateSelectInput(session, "analysis_mode", selected = initial_mode)
+      shiny::updateSelectInput(session, "panel_outcome", selected = "continuous")
       shiny::updateSelectInput(session, "time_family", selected = "single")
       shiny::updateSelectInput(session, "time_var", selected = initial_time)
       shiny::updateSelectInput(session, "y", selected = initial_y)
       shiny::updateSelectInput(session, "outcome_type", selected = initial_type)
       shiny::updateSelectizeInput(session, "x", selected = character(0), choices = setdiff(all_vars, initial_y), server = TRUE)
       state$fit <- NULL
+      state$panel_diag <- NULL
       state$comparison <- NULL
       state$error <- NULL
       state$warnings <- data.frame(model=character(), engine=character(), message=character(), stringsAsFactors=FALSE)
@@ -334,6 +359,22 @@
       dat_now <- active_data()
       numeric_now <- names(dat_now)[vapply(dat_now, is.numeric, logical(1))]
       if (!length(mods)) return(NULL)
+      if (identical(input$analysis_mode, "panel")) {
+        old <- shiny::isolate(list(inference = input$panel_inference, endogenous = input$panel_endogenous, instruments = input$panel_instruments, na = input$panel_na))
+        inference_choices <- c("Choose explicitly..." = "", "Classical model-based" = "classical")
+        if (!"panel_clogit" %in% mods) inference_choices <- c(inference_choices, "Individual cluster" = "cluster_id")
+        instrument_choices <- setdiff(numeric_now, c(input$y, input$x, input$panel_id, input$panel_time))
+        return(shiny::tagList(
+        shiny::selectInput("panel_inference", "Coefficient inference", choices = inference_choices, selected = if (length(old$inference) && old$inference %in% inference_choices) old$inference else ""),
+        if ("panel_fe_iv" %in% mods) shiny::tagList(
+          shiny::selectizeInput("panel_endogenous", "Endogenous regressors", choices = input$x, selected = intersect(old$endogenous, input$x), multiple = TRUE),
+          shiny::selectizeInput("panel_instruments", "Excluded instruments", choices = instrument_choices, selected = intersect(old$instruments, instrument_choices), multiple = TRUE),
+          shiny::p(class = "ec-note", "Instruments must be justified by the research design. They are never selected automatically. Missing instrument values enter the common-sample filter for this run.")),
+        if ("panel_clogit" %in% mods) shiny::p(class = "ec-note", "Exact conditional logit: choose classical inference. Individuals with all 0 or all 1 outcomes are excluded. No unconditional probability is estimated."),
+        shiny::selectInput("panel_na", "Missing model values", choices = c("Stop and inspect" = "fail", "Explicitly omit; report common sample" = "omit"), selected = if (length(old$na) && old$na %in% c("fail", "omit")) old$na else "fail"),
+        shiny::p(class = "ec-help", "Fixed effects may absorb invariant regressors. Random effects require orthogonality with individual heterogeneity. Cluster inference requires independent individuals and can be unreliable with few clusters.")
+      ))
+      }
       blocks <- list(
         shiny::div(class = "ec-section",
           shiny::div(class = "ec-step", shiny::div(class = "ec-step-n", "3"), shiny::div(class = "ec-h", "Set model parameters")),
@@ -360,8 +401,9 @@
               shiny::numericInput("system_p", .ec_labeled("VAR lag order in levels (K)", "Johansen/VECM uses the lag order of the underlying VAR in levels. This must be at least 2.", "econcompare does not choose K automatically."), value=2, min=2, step=1),
               shiny::numericInput("vecm_rank", .ec_labeled("Cointegration rank (r)", "Number of cointegrating relations imposed in the VECM. The researcher must choose this explicitly after considering Johansen tests and substantive knowledge.", "With k variables, r must lie between 1 and k-1."), value=1, min=1, step=1),
               shiny::selectInput("vecm_test", "Johansen statistic", choices=c("Trace"="trace","Maximum eigenvalue"="eigen"), selected="trace"),
-              shiny::selectInput("vecm_ecdet", "Johansen deterministic component", choices=c("Constant"="const","None"="none","Trend"="trend"), selected="const"),
+              shiny::selectInput("vecm_ecdet", "Deterministic term in cointegration relations", choices=c("Constant in cointegration relations"="const","No deterministic term in cointegration relations"="none","Trend in cointegration relations"="trend"), selected="const"),
               shiny::selectInput("vecm_spec", "Johansen specification", choices=c("Transitory"="transitory","Long-run"="longrun"), selected="transitory"),
+              shiny::helpText("Transitory uses lag-1 levels; long-run uses lag-K levels. Both parameterizations retain the same long-run matrix but express short-run coefficients differently. Deterministic terms in the differenced equations also depend on the selected Johansen case."),
               shiny::div(class="ec-tip-box", shiny::strong("Rank decision · "), "Johansen statistics are evidence for the researcher, not an automatic rank selector. Cointegrating vectors are normalization-dependent.")
             ))
           } else {
@@ -536,6 +578,9 @@
   
     state <- shiny::reactiveValues(
       fit = NULL,
+      run_config = NULL,
+      run_data = NULL,
+      run_time = NULL,
       comparison = NULL,
       error = NULL,
       warnings = data.frame(model=character(), engine=character(), message=character(), stringsAsFactors=FALSE),
@@ -548,10 +593,28 @@
       time_diag = NULL,
       stationarity = NULL,
       time_diag_error = NULL,
+      panel_diag = NULL,
       system_diag = NULL,
       system_diag_error = NULL
     )
   
+    current_config <- shiny::reactive({
+      values <- shiny::reactiveValuesToList(input)
+      keys <- c("analysis_mode", "binary_event", "ecm_long_intercept", "ecm_p", "ecm_q", "heckman_method", "iv_endog", "iv_instruments", "models", "ordinal_order", "outcome_type", "panel_id", "panel_outcome", "panel_endogenous", "panel_instruments", "panel_inference", "panel_na", "panel_time", "quantile_se", "robust_se", "selection_x", "selection_y", "system_p", "taus", "time_family", "time_hac_lag", "time_inference", "time_p", "time_q", "time_var", "tobit_left", "tobit_right", "var_deterministic", "vecm_ecdet", "vecm_rank", "vecm_spec", "vecm_test", "wls_weight", "x", "y")
+      list(inputs = stats::setNames(lapply(keys, function(k) values[[k]]), keys),
+        overrides = type_state$overrides, ordinal_levels = type_state$ordinal_levels)
+    })
+    results_stale <- shiny::reactive({
+      !is.null(state$fit) && !identical(current_config(), state$run_config)
+    })
+    diagnostic_ready <- function() {
+      if (isTRUE(results_stale())) {
+        shiny::showNotification("Settings changed. Run comparison again before requesting diagnostics.", type = "warning")
+        return(FALSE)
+      }
+      TRUE
+    }
+
     cmp_all <- shiny::reactive({
       shiny::req(state$fit, state$comparison)
       state$comparison
@@ -569,6 +632,7 @@
       state$extraction_warnings <- .ec_empty_extraction_issue()
       state$extraction_failures <- .ec_empty_extraction_issue()
       state$fit <- NULL
+      state$panel_diag <- NULL
       state$comparison <- NULL
       state$diag_results <- list()
       state$diag_selected <- list()
@@ -580,10 +644,26 @@
       state$system_diag_error <- NULL
   
       tryCatch({
+        state$run_config <- current_config()
+        state$run_data <- active_data()
+        state$run_time <- Sys.time()
         y <- input$y
         x <- input$x
         if (!length(y) || !length(x)) .ec_stop("Choose one dependent variable and at least one explanatory variable.")
 
+        if (identical(input$analysis_mode, "panel")) {
+          if (is.null(input$panel_inference) || !nzchar(input$panel_inference)) .ec_stop("Choose the panel inference method explicitly.")
+          fit <- eco_panel_run(active_data(), .ec_formula(y, x), id = input$panel_id, time = input$panel_time,
+            models = input$models, inference = input$panel_inference,
+            outcome_type = if (is.null(input$panel_outcome)) "continuous" else input$panel_outcome,
+            endogenous = if ("panel_fe_iv" %in% input$models) input$panel_endogenous else NULL,
+            instruments = if ("panel_fe_iv" %in% input$models) input$panel_instruments else NULL,
+            na_action = if (is.null(input$panel_na)) "fail" else input$panel_na, error_policy = "collect")
+          state$fit <- fit; state$comparison <- eco_compare(fit)
+          state$warnings <- fit$warnings; state$panel_diag <- NULL
+          shiny::updateTabsetPanel(session, "workspace_tab", selected = "2 · Compare models")
+          return()
+        }
         if (identical(input$analysis_mode, "time_series")) {
           tv <- input$time_var
           if (is.null(tv) || !nzchar(tv)) .ec_stop("Choose an explicit time index for time-series econometrics.")
@@ -718,6 +798,7 @@
   
     output$run_status <- shiny::renderUI({
       if (!state$ran) return(NULL)
+      if (isTRUE(results_stale())) return(shiny::div(class = "ec-status ec-warn", "Settings changed. Results below belong to the previous run; run comparison again to update them."))
       if (!is.null(state$error)) return(shiny::div(class = "ec-status ec-error", state$error))
       if (!is.null(state$fit) && (nrow(state$fit$failures) || nrow(state$extraction_failures))) {
         return(shiny::div(
@@ -731,6 +812,9 @@
       }
       if (!is.null(state$fit)) {
         sa <- eco_sample_audit(state$fit)
+        if (inherits(state$fit, "econcompare_panel") && length(unique(sa$observation_unit)) > 1L) {
+          return(shiny::div(class = "ec-status ec-warn", paste(length(state$fit$models), "model result(s) ready with different observation units. Inspect source exclusions and effective counts in Sample audit.")))
+        }
         if (nrow(sa) && (any(sa$matches_reference_n %in% FALSE, na.rm = TRUE) || any(sa$matches_reference_rows %in% FALSE, na.rm = TRUE))) return(shiny::div(class = "ec-status ec-warn", paste(length(state$fit$models), "model result(s) ready; estimation-sample mismatch detected across models. See Sample audit.")))
       }
       if ((is.data.frame(state$warnings) && nrow(state$warnings)) || nrow(state$extraction_warnings)) {
@@ -742,14 +826,15 @@
   
     output$run_meta <- shiny::renderUI({
       if (is.null(state$fit)) return(NULL)
-      shiny::div(class = "ec-chip-wrap",
+      shiny::tagList(.ec_reproducibility_ui(state$fit), shiny::div(class = "ec-chip-wrap",
+        shiny::tags$span(class = "ec-chip ec-chip-soft", if (!is.null(state$fit$formula)) paste("Fitted:", paste(deparse(state$fit$formula), collapse = " ")) else paste("Fitted variables:", paste(state$fit$variables, collapse = ", "))),
         shiny::tags$span(class = "ec-chip ec-chip-soft", paste(length(state$fit$models), "estimated result(s)")),
-        shiny::tags$span(class = "ec-chip ec-chip-soft", if (state$fit$analysis_type %in% c("time_series", "time_series_system")) paste("Time index:", state$fit$time_variable) else paste("Outcome:", state$fit$outcome_type)),
+        shiny::tags$span(class = "ec-chip ec-chip-soft", if (isTRUE(state$fit$analysis_type %in% c("time_series", "time_series_system"))) paste("Time index:", state$fit$time_variable) else paste("Outcome:", state$fit$outcome_type)),
         if (identical(state$fit$analysis_type, "time_series")) shiny::tags$span(class="ec-chip ec-chip-soft", paste("Inference:", state$fit$inference)),
         if (identical(state$fit$analysis_type, "time_series_system")) shiny::tags$span(class="ec-chip ec-chip-soft", paste("System:", toupper(state$fit$temporal_family))),
         if (length(state$fit$type_overrides)) shiny::tags$span(class="ec-chip ec-chip-soft", paste(length(state$fit$type_overrides), "manual type override(s)")),
-        shiny::tags$span(class = "ec-chip ec-chip-soft", paste("Generated", format(Sys.time(), "%H:%M")))
-      )
+        shiny::tags$span(class = "ec-chip ec-chip-soft", paste("Generated", format(state$run_time, "%H:%M")))
+      ))
     })
   
     output$diag_controls_ui <- shiny::renderUI({
@@ -800,6 +885,7 @@
     })
   
     shiny::observeEvent(input$diag_run, {
+      if (!diagnostic_ready()) return()
       shiny::req(state$fit, input$diag_model)
       model_name <- input$diag_model
       tests <- input$diag_tests
@@ -896,6 +982,12 @@
           shiny::actionButton("run_stationarity", "Run ADF + KPSS")
         ),
         shiny::p(class="ec-note", "ADF and KPSS have different null hypotheses. Select only the series you want to test, specify the ADF deterministic component and lag order, and choose the KPSS level/trend null explicitly. econcompare reports results and never differences a variable automatically."),
+        shiny::uiOutput("time_diag_results")
+      )
+    })
+    output$time_diag_results <- shiny::renderUI({
+      if (is.null(state$fit)) return(NULL)
+      shiny::tagList(
         if (!is.null(state$time_diag_error)) shiny::div(class="ec-status ec-warn", state$time_diag_error),
         if (is.data.frame(state$time_diag) && nrow(state$time_diag)) shiny::tagList(
           shiny::h4("Residual serial correlation"),
@@ -910,6 +1002,7 @@
     })
 
     shiny::observeEvent(input$run_time_bg, {
+      if (!diagnostic_ready()) return()
       if (is.null(state$fit) || !identical(state$fit$analysis_type, "time_series")) return()
       state$time_diag_error <- NULL
       ans <- tryCatch(eco_time_diagnostics(state$fit, bg_order=input$time_bg_order), error=function(e)e)
@@ -917,11 +1010,12 @@
     })
 
     shiny::observeEvent(input$run_stationarity, {
+      if (!diagnostic_ready()) return()
       if (is.null(state$fit) || !identical(state$fit$analysis_type, "time_series")) return()
       state$time_diag_error <- NULL
       vars <- if (is.null(input$time_stationarity_vars)) character() else input$time_stationarity_vars
       if (!length(vars)) { state$time_diag_error <- "Choose at least one series for ADF/KPSS diagnostics."; return() }
-      dat <- active_data(); ans <- tryCatch(eco_stationarity_tests(dat, vars, state$fit$time_variable, adf_k=input$time_adf_k, adf_deterministic=input$time_adf_deterministic, kpss_null=input$time_kpss_null), error=function(e)e)
+      dat <- state$run_data; ans <- tryCatch(eco_stationarity_tests(dat, vars, state$fit$time_variable, adf_k=input$time_adf_k, adf_deterministic=input$time_adf_deterministic, kpss_null=input$time_kpss_null), error=function(e)e)
       if (inherits(ans,"error")) state$time_diag_error <- conditionMessage(ans) else state$stationarity <- ans
     })
 
@@ -939,6 +1033,12 @@
           shiny::actionButton("run_system_stationarity", "Run ADF + KPSS")
         ),
         shiny::p(class="ec-note", "VAR/VECM diagnostics are system-level checks. The Portmanteau test concerns residual serial correlation in the joint system. ADF/KPSS remain series-level diagnostics and do not mechanically determine whether VAR or VECM is appropriate."),
+        shiny::uiOutput("system_diag_results")
+      )
+    })
+    output$system_diag_results <- shiny::renderUI({
+      if (is.null(state$fit)) return(NULL)
+      shiny::tagList(
         if (!is.null(state$system_diag_error)) shiny::div(class="ec-status ec-warn", state$system_diag_error),
         if (is.list(state$system_diag)) shiny::tagList(
           shiny::h4("Companion roots"),
@@ -960,6 +1060,7 @@
     })
 
     shiny::observeEvent(input$run_system_diag, {
+      if (!diagnostic_ready()) return()
       if (is.null(state$fit) || !identical(state$fit$analysis_type, "time_series_system")) return()
       state$system_diag_error <- NULL
       ans <- tryCatch(eco_system_diagnostics(state$fit, serial_lags=input$system_serial_lags), error=function(e)e)
@@ -967,12 +1068,68 @@
     })
 
     shiny::observeEvent(input$run_system_stationarity, {
+      if (!diagnostic_ready()) return()
       if (is.null(state$fit) || !identical(state$fit$analysis_type, "time_series_system")) return()
       state$system_diag_error <- NULL
       vars <- if (is.null(input$system_stationarity_vars)) character() else input$system_stationarity_vars
       if (!length(vars)) { state$system_diag_error <- "Choose at least one system series for ADF/KPSS diagnostics."; return() }
-      ans <- tryCatch(eco_stationarity_tests(active_data(), vars, state$fit$time_variable, adf_k=input$system_adf_k, adf_deterministic=input$system_adf_deterministic, kpss_null=input$system_kpss_null), error=function(e)e)
+      ans <- tryCatch(eco_stationarity_tests(state$run_data, vars, state$fit$time_variable, adf_k=input$system_adf_k, adf_deterministic=input$system_adf_deterministic, kpss_null=input$system_kpss_null), error=function(e)e)
       if (inherits(ans,"error")) state$system_diag_error <- conditionMessage(ans) else state$stationarity <- ans
+    })
+
+    panel_model <- shiny::reactive({
+      if (!inherits(state$fit, "econcompare_panel")) return(NULL)
+      nm <- input$panel_diag_model
+      if (is.null(nm)) return(names(state$fit$models)[1L])
+      if (length(nm) != 1L || !nm %in% names(state$fit$models)) return(NULL)
+      nm
+    })
+    output$panel_diag_controls <- shiny::renderUI({
+      nm <- panel_model(); shiny::req(nm)
+      cap <- .ec_panel_model_capabilities(state$fit, nm)
+      available <- unique(cap$test[cap$selectable])
+      limits <- cap[!cap$selectable, c("model", "test", "reason"), drop = FALSE]
+      labels <- .ec_panel_test_catalogue()[available]
+      if (any(cap$audit_only & cap$selectable)) labels[available == "dependence"] <- paste(labels[available == "dependence"], "— audit only; conclusion suspended")
+      shiny::tagList(
+        shiny::p(class = "ec-note", "Tests apply to the selected model. FE/pooled and FE/RE comparisons use the required companion model from this run."),
+        if (length(available)) shiny::checkboxGroupInput("panel_tests", "Tests",
+          choices = stats::setNames(available, unname(labels)), selected = character()),
+        if ("serial" %in% available) shiny::numericInput("panel_serial_order", "Serial order", 1, min = 1, step = 1),
+        if (length(available)) shiny::actionButton("panel_run_diagnostics", "Run selected tests", class = "btn-primary"),
+        if (nrow(limits)) shiny::tags$details(class = "ec-raw", open = "open",
+          shiny::tags$summary("Diagnostic limitations"), .ec_panel_table_ui(limits)))
+    })
+
+    shiny::observeEvent(input$panel_run_diagnostics, {
+      if (!diagnostic_ready()) return()
+      shiny::req(state$fit)
+      if (!inherits(state$fit, "econcompare_panel")) return()
+      if (!length(input$panel_tests)) {
+        shiny::showNotification("Select at least one diagnostic question.", type = "message")
+        return()
+      }
+      state$panel_diag <- tryCatch(.ec_panel_diagnostics_for_model(state$fit, panel_model(), tests = input$panel_tests,
+        serial_order = if (is.null(input$panel_serial_order)) 1L else input$panel_serial_order), error = function(e) e)
+    })
+    shiny::observeEvent(list(input$panel_diag_model, input$panel_tests, input$panel_serial_order), {
+      state$panel_diag <- NULL
+    }, ignoreInit = TRUE, priority = 10)
+    shiny::observeEvent(input$time_bg_order, { state$time_diag <- NULL }, ignoreInit = TRUE, priority = 10)
+    shiny::observeEvent(input$system_serial_lags, { state$system_diag <- NULL }, ignoreInit = TRUE, priority = 10)
+    shiny::observeEvent(list(input$time_stationarity_vars, input$time_adf_k, input$time_adf_deterministic,
+      input$time_kpss_null, input$system_stationarity_vars, input$system_adf_k,
+      input$system_adf_deterministic, input$system_kpss_null), {
+      state$stationarity <- NULL
+    }, ignoreInit = TRUE, priority = 10)
+
+    output$panel_diag_table <- shiny::renderUI({
+      if (is.null(state$panel_diag)) {
+        if (!inherits(state$fit, "econcompare_panel")) return(NULL)
+        return(shiny::p(class = "ec-note", .ec_panel_diagnostic_prompt(state$fit, panel_model())))
+      }
+      if (inherits(state$panel_diag, "error")) return(shiny::div(class = "ec-status ec-error", conditionMessage(state$panel_diag)))
+      .ec_panel_diagnostics_ui(state$panel_diag)
     })
 
     output$results_ui <- shiny::renderUI({
@@ -988,6 +1145,10 @@
           )
         ))
       }
+      if (inherits(state$fit, "econcompare_panel")) return(shiny::tagList(
+        shiny::p(class = "ec-note", paste("Estimated formula:", paste(deparse(state$fit$formula), collapse = " "),
+          "| Individual index:", state$fit$panel_id, "| Time index:", state$fit$time_variable)),
+        .ec_panel_results_ui(state$fit)))
       cmp <- cmp_all()
       if (!nrow(cmp)) {
         return(shiny::tagList(
@@ -1055,7 +1216,7 @@
             if (nrow(bt)) shiny::div(class="ec-table-wrap ec-table", shiny::HTML(.ec_html_table(cbind(term=rownames(bt), bt)))) else shiny::p(class="ec-note", "Cointegrating-vector table unavailable.")
           }
         ),
-        shiny::tabPanel(if (state$fit$analysis_type %in% c("time_series", "time_series_system")) "Diagnostics" else "Cross-section diagnostics",
+        shiny::tabPanel(if (isTRUE(state$fit$analysis_type %in% c("time_series", "time_series_system"))) "Diagnostics" else "Cross-section diagnostics",
           if (identical(state$fit$analysis_type, "time_series")) shiny::tagList(
             shiny::p(class = "ec-note", "Temporal diagnostics are deliberately user-controlled. Run Breusch-Godfrey for residual serial correlation and complementary ADF/KPSS diagnostics on the series you select. ADF uses the explicit deterministic specification you choose; no transformation is performed automatically."),
             shiny::uiOutput("time_diag_ui")
@@ -1070,7 +1231,7 @@
           shiny::uiOutput("diag_model_ui")
           )
         ),
-        if (state$fit$analysis_type %in% c("time_series", "time_series_system")) shiny::tabPanel("Time structure",
+        if (isTRUE(state$fit$analysis_type %in% c("time_series", "time_series_system"))) shiny::tabPanel("Time structure",
           shiny::p(class="ec-note", "The time index is validated before estimation. Missing/duplicated periods and internal calendar gaps are not silently repaired. Lagged models require a complete regular grid."),
           shiny::div(class="ec-table-wrap ec-table", shiny::HTML(.ec_html_table(state$fit$time_audit)))
         ),

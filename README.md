@@ -1,8 +1,6 @@
-<img width="1847" height="945" alt="image" src="https://github.com/user-attachments/assets/5c7cbe3e-3305-4d18-9f1e-5e65409f9f32" />
-
 # econcompare
 
-**Outcome-aware econometric exploration for cross-sectional and explanatory time-series data in R.**
+**Outcome-aware econometric exploration for cross-sectional, explanatory time-series and panel data in R.**
 
 `econcompare` is a research-oriented R package for quickly exploring data, estimating a small set of candidate econometric models, and comparing their results in one interface before continuing the detailed analysis in dedicated R code.
 
@@ -10,7 +8,7 @@ The package is intentionally **comparison-first rather than automation-first**. 
 
 ## Model groups
 
-Version 0.11.0 preserves outcome-aware cross-sectional comparison and extends explanatory time-series econometrics from static/dynamic/ARDL regressions to explicit ECM and multivariate VAR/VECM systems, while keeping lag order, deterministic terms and cointegration rank under researcher control.
+Version 0.14.4 fixes help-bubble layering and temporal diagnostic selection resets, removes the panel Interpretation tab, and introduces model-by-model panel diagnostic controls. This is a source candidate; see [VALIDATION_0.14.4.md](VALIDATION_0.14.4.md) for validation limits.
 
 ### Continuous outcomes
 
@@ -160,7 +158,7 @@ eco_compare(fit_ord)
 ```
 
 
-## Explanatory time-series econometrics (0.11.0)
+## Explanatory time-series econometrics
 
 `econcompare` does **not** aim to be a forecasting package. Time-series mode is designed to study relationships among variables observed over time. The workflow is: detect/confirm the time index, audit temporal structure, explore trajectories, choose an explicit lag specification, estimate, compare, and diagnose.
 
@@ -367,12 +365,212 @@ This does not make that model an econometric benchmark.
 
 ## Project status
 
-`econcompare` is research software. Version 0.11.0 combines the stable outcome-aware cross-sectional workflow with explanatory time-series tools covering temporal regression, distributed lags, dynamic regression, ARDL, ECM, VAR and VECM. The package intentionally prioritises a small, understandable and auditable workflow over forecasting automation or automatic model-selection rules.
-
-Version 0.11.0 should be treated as an advanced public beta until the package passes a local `devtools::check()` / `R CMD check` and the GitHub Actions matrix. ECM/VAR/VECM outputs should be interpreted together with their diagnostics; econcompare does not automatically select lag order, deterministic specification or cointegration rank.
+`econcompare` is research software. Version 0.12.0 adds a static linear panel workflow and regression tests. Runtime validation remains pending. Release validation is described in GITHUB_PUBLISHING.md. The package intentionally prioritises a small, understandable and auditable workflow over forecasting automation or automatic model-selection rules.
 
 Before using results in published empirical work, inspect estimator warnings, verify assumptions and continue the final analysis with the underlying modelling package where appropriate.
 
 ## Licence
 
 MIT. See `LICENSE` and `LICENSE.md`.
+
+
+## Static linear panels (0.12.0)
+
+Install the optional `plm` package. Explicitly choose both indexes. A panel suggestion
+from `eco_data_structure()` is advisory and does not activate an estimator.
+
+```r
+library(econcompare)
+data("Grunfeld", package = "plm")
+eco_panel_audit(Grunfeld, id = "firm", time = "year")
+eco_panel_models()
+fit <- eco_panel_run(
+  Grunfeld, inv ~ value + capital, id = "firm", time = "year",
+  models = c("panel_pooling", "panel_fe_individual", "panel_fe_time",
+             "panel_fe_twoways", "panel_re"),
+  inference = "cluster_id"
+)
+eco_compare(fit)
+eco_sample_audit(fit)
+eco_panel_diagnostics(fit, tests = c("serial", "dependence", "hausman"))
+eco_app(Grunfeld)  # Choose Panel data econometrics, indexes and inference.
+```
+
+The first release accepts a numeric response and static additive named regressors
+(numeric, logical or factors). Precompute transformations; dynamic models are not
+supported by putting `lag()` in the formula. Unbalanced panels are allowed. Missing
+model observations stop by default; `na_action = "omit"` records a common complete-case
+sample. Missing indexes and duplicate id-period pairs always stop.
+
+| Engine | Interpretation |
+|---|---|
+| `panel_pooling` | Pooled OLS; no absorption of individual heterogeneity |
+| `panel_fe_individual` | Within-individual association |
+| `panel_fe_time` | Association net of common period effects |
+| `panel_fe_twoways` | Association net of individual and period effects |
+| `panel_re` | Individual random-effects GLS, Swamy-Arora; requires orthogonality |
+| `panel_fd` | Consecutive within-individual changes, without added drift |
+| `panel_between` | Equally weighted individual temporal means |
+| `panel_mundlak` | RE augmented with means of time-varying regressors |
+
+`inference = "classical"` uses model-based covariance with residual t degrees of
+freedom. For the original five estimators and Mundlak, `"cluster_id"` uses Arellano HC1 group covariance and t(G-1), assuming
+independence between individuals. The number of groups is reported; this rule does
+not solve small-cluster inference. The Shiny interface requires an explicit choice.
+
+Absorbed regressors remain in the comparison with `NA` and `term_status`; they do not
+have an estimated zero effect. Other collinearities fail explicitly. Fixed-effect
+singleton observations are excluded and listed in `sample_exclusions`, recursively
+for two-way effects. Compare exact samples with `eco_sample_audit()`. Original row
+references are positions in the input, independent of user-assigned row names.
+
+Classical F and panel-effects LM tests are available only for classical-inference
+objects. The serial BG and Pesaran CD tests have explicit applicability gates.
+Hausman is optional: fitted-model classical comparison, or robust auxiliary regression
+for cluster inference with matching FE/RE slope sets. A failed prerequisite produces
+`unavailable`, not an invented statistic. No test automatically chooses FE or RE.
+
+Gaps are permitted for static estimation; serial tests require verified consecutive
+periods within each individual. Numeric time means integer period coordinates. Use
+`"2020-01"` or `"2020-Q1"` for calendar data. Check any cadence inferred from dates.
+Balance and missing-at-random are different questions: this audit does not establish
+that attrition is ignorable. Two-way FE is not automatically a valid causal DiD design.
+R-squared refers to transformed equations, and AIC/BIC are not supplied for ranking
+these estimators.
+
+Run the reproducible tutorial with:
+
+```r
+source(system.file("examples", "panel_workflow.R", package = "econcompare"))
+```
+
+The [panel extension roadmap](PANEL_ROADMAP.md) keeps additional linear models,
+nonlinear outcomes, IV, dynamics and more advanced inference in scope for later work.
+
+
+## 0.12.2 specification and reproducibility contract
+
+Temporal and ECM response formulas accept one named numeric column. Precompute
+`log_y <- log(y)` in the input data rather than passing `log(y)` as the response.
+Temporal formulas require an intercept; `y ~ x - 1` is rejected explicitly.
+For ECM, use `long_run_intercept = FALSE` to remove the first-step intercept.
+Generated lag/difference names must not collide; rename conflicting columns.
+
+Aliased OLS/WLS terms remain visible as NA with an explanatory `term_status`.
+Expected FE absorption is stored in `fit$information`, separate from warnings.
+`fit$provenance` records requested/fitted formulas, source and loaded engine
+versions, specifications and sample information. Raw model objects remain accessible.
+
+In Shiny, changing estimation inputs flags the displayed results as belonging to
+the previous run. Rerun before requesting diagnostics; stationarity diagnostics
+use the captured data for that run. Changes to diagnostic parameters clear their
+previous output. Suggestions for panel indexes still require explicit selection.
+
+
+## Additional linear panel models in 0.13.0
+
+```r
+fit <- eco_panel_run(
+  Grunfeld, inv ~ value + capital, id = "firm", time = "year",
+  models = c("panel_fe_individual", "panel_fd", "panel_between", "panel_mundlak"),
+  inference = "cluster_id"
+)
+eco_compare(fit)
+eco_sample_audit(fit)
+fit$transformations              # Original source-row membership
+fit$mean_terms$panel_mundlak     # Generated names -> original variables
+fit$components$panel_mundlak     # Slopes and covariance-based contrasts
+eco_panel_diagnostics(fit, tests = "mundlak")
+```
+
+These three new engines currently accept numeric/logical regressors. Explicitly
+encode factor contrasts before using them. First differences use only verified
+consecutive periods and never bridge a missing observation. The intercept is
+absorbed, no drift is introduced, and R-squared is uncentered. For a plm reference,
+use `model = "fd"` and a formula with `-1`, because plm otherwise retains a drift.
+
+Between averages the complete-case sample separately for each individual, includes
+singletons and weights each mean equally. Mundlak uses that same sample to construct
+means of varying regressors; invariant regressors receive no redundant mean. The
+original slope is a within-type conditional association, the mean coefficient is a
+between-minus-within contrast, and their sum is a between-type association. The
+sum need not equal a separate between regression in an unbalanced panel. Neither
+model corrects informative missingness or time-varying endogeneity automatically.
+
+`n_used` counts contributing source rows; `n_effective` and `nobs` count observations
+in the transformed equation. Shiny presents these units and source membership in
+Sample audit. The panel Interpretation tab has been removed in 0.14.4. The
+independent HTML export still includes interpretation and Mundlak components.
+
+FD cluster covariance uses `sandwich::vcovCL(type = "HC1", cadjust = TRUE)` with
+individual clusters. Between uses `sandwich::vcovHC(type = "HC1")` across individual
+means. Both use t(G-1); the precise convention is recorded per model. Classical FD
+inference requires assumptions on differenced errors; independent level errors
+generally become correlated after differencing.
+
+The optional Mundlak diagnostic is an approximate Wald F test of the added means,
+using the selected covariance. It is not an automatic RE selection rule. BG/CD
+requests for FD or between return explicit unavailable records; applying the
+existing level-panel diagnostics mechanically would misrepresent their scope.
+
+Method references: [plm estimator documentation](https://rdrr.io/cran/plm/man/plm.html),
+[sandwich clustered covariance documentation](https://rdrr.io/cran/sandwich/man/vcovCL.html),
+[Stata's Mundlak explanation](https://blog.stata.com/2015/10/29/fixed-effects-or-random-effects-the-mundlak-approach/).
+
+
+## Panel extension 0.14.0: explicit outcome and identification
+
+The original eight linear engines are preserved. Three engines are added:
+
+| Engine | Outcome | Estimator | Inference |
+|---|---|---|---|
+| `panel_clogit` | Binary numeric 0/1 | Exact conditional logit, individual strata | Classical conditional-likelihood covariance, normal z; no cluster option |
+| `panel_poisson` | Non-negative integer counts | Poisson individual FE | Classical normal z or individual-cluster t(G-1) |
+| `panel_fe_iv` | Continuous | Individual within-2SLS | Classical residual t or individual-cluster t(G-1) |
+
+```r
+binary_fit <- eco_panel_run(d, binary ~ x + w, "id", "period",
+  outcome_type = "binary", inference = "classical")
+count_fit <- eco_panel_run(d, count ~ x + w, "id", "period",
+  outcome_type = "count", inference = "cluster_id")
+iv_fit <- eco_panel_run(d, y ~ endogenous_x + w, "id", "period",
+  models = c("panel_fe_individual", "panel_fe_iv"),
+  endogenous = "endogenous_x", instruments = c("z1", "z2"),
+  inference = "cluster_id")
+iv_fit$first_stages
+eco_panel_diagnostics(iv_fit, tests = "iv_first_stage")
+```
+
+These snippets require your own columns; run the self-contained example
+`inst/examples/panel_specialized_workflow.R` for simulated demonstration data.
+No instruments are selected automatically. Instrument missingness enters the
+common sample, including the non-IV comparisons in the same run. First-stage
+Wald tests address relevance, not validity, and are not general weak-IV diagnostics.
+
+All three adapters initially use individual effects and numeric/logical regressors
+(FE-IV: numeric only). Exact logit excludes individuals without binary changes;
+Poisson excludes all-zero individuals and singletons. Original row positions and
+absorbed terms remain visible. The Poisson adapter currently excludes rates,
+non-integer PPML outcomes and exposure offsets. R-squared is withheld for these
+three adapters; no likelihood-based cross-estimator ranking is supplied.
+
+Shiny requires an explicit panel outcome family. Endogenous-regressor and excluded-
+instrument controls appear only for FE-IV. Model fit reports coefficient scales and
+inference. In Diagnostics, select one fitted model, then its available tests;
+first-stage relevance is available for FE-IV. There is no panel Interpretation tab.
+Raw API term names are retained while `term_label` supplies readable Mundlak names.
+
+Diagnostics retain `status` and add `reason_code` distinguishing missing models,
+inapplicable tests, unimplemented diagnostics and calculation failures. After
+period effects, standard Pesaran CD is marked `computed_uninterpreted`: the engine
+statistic and `raw_p.value` remain auditable, but the inferential `p.value` is NA
+and automatic conclusions are suspended. This is a conservative safeguard, not a
+new corrected CD test. Mundlak displays covariance choice and inference degrees
+of freedom explicitly. BG/CD are not implemented for the nonlinear/IV adapters.
+
+References:
+- [survival conditional logit](https://stat.ethz.ch/R-manual/R-devel/library/survival/html/clogit.html)
+- [fixest GLM and Poisson](https://lrberge.github.io/fixest/reference/feglm.html)
+- [fixest finite-sample covariance adjustments](https://lrberge.github.io/fixest/reference/ssc.html)
+- [plm within instrumental variables](https://rdrr.io/cran/plm/man/plm.html)
+- [Juodis and Reese: CD with estimated time effects](https://doi.org/10.1080/07350015.2021.1906687)

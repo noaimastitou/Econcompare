@@ -8,6 +8,9 @@ test_that("selected analysis objective is sufficient to run the app", {
     session$setInputs(y = "mpg", outcome_type = "continuous", x = c("wt", "hp"), models = "ols", run = 1)
     expect_null(state$error)
     expect_s3_class(state$fit, "econcompare")
+    expect_true(nrow(state$comparison) > 0L)
+    expect_error(output$run_meta, NA)
+    expect_error(output$results_ui, NA)
   })
 })
 

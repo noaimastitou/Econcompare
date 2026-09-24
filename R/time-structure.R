@@ -102,6 +102,10 @@
 #' @export
 eco_data_structure <- function(data) {
   if(!is.data.frame(data)).ec_stop("`data` must be a data.frame.");.ec_validate_data_columns(data);cand<-.ec_time_candidates(data)
+  pc <- .ec_panel_candidates(data)
+  if (nrow(pc)) return(list(structure="panel_candidate", confidence="medium", time_variable=NULL,
+    reason=paste0("Repeated individuals with unique individual-period pairs are plausible: ", paste(paste(pc$id, pc$time, sep=" + "), collapse="; "), ". Confirm both indexes explicitly in Panel mode."),
+    candidates=cand, panel_candidates=pc))
   if(!nrow(cand))return(list(structure="cross_section",confidence="high",time_variable=NULL,reason="No sufficiently reliable temporal index candidate was detected.",candidates=cand))
   top<-cand[1L,,drop=FALSE]; second<-if(nrow(cand)>1L)cand$score[2L] else -Inf; unique_index<-!isTRUE(top$duplicated_time);clear<-is.infinite(second)||top$score>=second+2;strong<-top$score>=7;regular<-isTRUE(top$regular_spacing)
   if(strong&&unique_index&&regular&&clear)return(list(structure="time_series",confidence="high",time_variable=top$variable,reason=paste0("Reliable temporal index detected in `",top$variable,"` (",top$frequency,")."),candidates=cand))
@@ -123,6 +127,6 @@ eco_time_audit <- function(data,time){
 .ec_prepare_time_data <- function(data,time){
   aud<-eco_time_audit(data,time);if(aud$missing_time>0L).ec_stop("Time-series modelling requires a non-missing time index. `",time,"` contains ",aud$missing_time," missing time value(s).")
   if(aud$duplicate_time>0L).ec_stop("Single-series time econometrics requires one observation per time point. `",time,"` contains duplicated time values. Repeated dates may indicate panel/longitudinal data.")
-  p<-.ec_parse_time_vector(data[[time]],time);ord<-order(p$parsed);out<-data[ord,,drop=FALSE]; original_ids<-rownames(data); if(is.null(original_ids)) original_ids<-as.character(seq_len(nrow(data))); rownames(out)<-original_ids[ord]
+  p<-.ec_parse_time_vector(data[[time]],time);ord<-order(p$parsed);original_ids<-rownames(data); if(is.null(original_ids)) original_ids<-as.character(seq_len(nrow(data))); out<-as.data.frame(data)[ord,,drop=FALSE]; rownames(out)<-original_ids[ord]
   list(data=out,parsed=p$parsed[ord],display=p$display[ord],dates=p$dates[ord],kind=p$kind,audit=aud,reordered=!identical(ord,seq_len(nrow(data))))
 }

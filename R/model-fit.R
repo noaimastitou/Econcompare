@@ -1,5 +1,8 @@
 .ec_fit_basis <- function(engine) {
   switch(engine,
+    panel_clogit = "Exact conditional logit likelihood",
+    panel_poisson = "Poisson conditional-mean model",
+    panel_fe_iv = "Within-individual 2SLS",
     lpm = "Gaussian linear fit",
     logit = "Binomial likelihood",
     probit = "Binomial likelihood",

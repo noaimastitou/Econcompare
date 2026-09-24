@@ -247,6 +247,9 @@ eco_run <- function(data, formula, models = "ols", model_args = list(),
       failures[[name]] <<- data.frame(model = name, engine = engine, message = conditionMessage(ans), stringsAsFactors = FALSE)
       return(invisible(NULL))
     }
+    if (inherits(ans, "lm") && anyNA(stats::coef(ans))) {
+      warnings[[name]] <<- unique(c(captured, "Some coefficients are not identifiable. NA rows are retained with term_status; remove redundant regressors explicitly."))
+    }
     add_fit(name, ans, engine, meta_extra = meta_extra, sample_data = sample_data)
     invisible(ans)
   }
@@ -365,9 +368,10 @@ eco_run <- function(data, formula, models = "ols", model_args = list(),
   rownames(sample_df) <- NULL
 
   out <- list(call = match.call(), formula = formula, models = fits, meta = meta,
-              outcome_type = outcome_type, warnings = warning_df, failures = failure_df,
+              outcome_type = outcome_type, analysis_type = "cross_section", warnings = warning_df, failures = failure_df,
               sample_info = sample_df, type_overrides = attr(data, "econcompare_type_overrides"),
               data_n = nrow(data), created = Sys.time(), version = .ec_version())
+  out$provenance <- .ec_provenance(out)
   class(out) <- "econcompare"
   out
 }
@@ -406,6 +410,8 @@ eco_sample_audit <- function(x, reference = NULL) {
     "unavailable"
   }, character(1))
   z$sample_match <- vapply(seq_len(nrow(z)), function(i) {
+    if ("observation_unit" %in% names(z) && !identical(z$observation_unit[i], z$observation_unit[ref_i])) return(paste0("different observation unit from ", reference))
+    if ("observation_unit" %in% names(z) && !is.na(z$matches_reference_n[i]) && !z$matches_reference_n[i]) return(paste0("different effective sample size from ", reference))
     if (!is.na(z$matches_reference_rows[i])) {
       if (z$matches_reference_rows[i]) paste0("same rows as ", reference) else paste0("different rows from ", reference)
     } else if (!is.na(z$matches_reference_n[i])) {
@@ -413,6 +419,7 @@ eco_sample_audit <- function(x, reference = NULL) {
     } else "unknown"
   }, character(1))
   z$sample_warning <- vapply(seq_len(nrow(z)), function(i) {
+    if ("observation_unit" %in% names(z) && isTRUE(z$matches_reference_rows[i]) && !identical(z$observation_unit[i], z$observation_unit[ref_i])) return("Same source rows, but different observation units and estimands; transformed sample sizes are not directly comparable")
     zero_w <- is.finite(z$zero_weight_n[i]) && z$zero_weight_n[i] > 0
     if (grepl("^different", z$sample_match[i])) {
       msg <- "comparison may reflect both estimator and sample differences"

@@ -30,13 +30,20 @@
 }
 
 .ec_fmt <- function(x, digits = 4) {
-  ifelse(is.na(x), "NA", formatC(x, digits = digits, format = "f"))
+  out <- formatC(x, digits = digits, format = "f")
+  tiny <- !is.na(x) & is.finite(x) & x != 0 & abs(x) < 10^(-digits)
+  out[tiny] <- formatC(x[tiny], digits = 2, format = "e")
+  out[is.na(x)] <- "NA"
+  out
 }
 
 
-.ec_version <- function() {
-  tryCatch(as.character(utils::packageVersion("econcompare")),
-           error = function(e) "0.11.0")
+.ec_version <- function() "0.14.4"
+
+.ec_validate_generated_names <- function(x) {
+  bad <- unique(x[duplicated(x)])
+  if (length(bad)) .ec_stop("Generated-term name collision: ", paste(bad, collapse = ", "), ". Rename the conflicting input columns before fitting; no generated column was overwritten.")
+  invisible(TRUE)
 }
 
 .ec_quote_name <- function(x) {
@@ -123,4 +130,21 @@
   if (!length(selection_x)) .ec_stop("Heckman requires at least one selection regressor.")
   .ec_validate_heckman_selection(outcome_y, selection_y, selection_x, outcome_x = outcome_x)
   invisible(TRUE)
+}
+
+.ec_fmt_p <- function(x) {
+  out <- .ec_fmt(x)
+  out[!is.na(x) & x == 0] <- "<0.0001"
+  out
+}
+
+.ec_provenance <- function(x) {
+  packages <- intersect(c("stats", "survival", "plm", "vars", "urca", "lmtest", "sandwich", "estimatr",
+    "fixest", "MASS", "quantreg", "ivreg", "nnet", "censReg", "sampleSelection"), loadedNamespaces())
+  list(econcompare_version = .ec_version(), R_version = as.character(getRversion()),
+    engine_versions = stats::setNames(vapply(packages, function(p) as.character(utils::packageVersion(p)), character(1)), packages),
+    requested_formula = x$formula,
+    fitted_formulas = lapply(x$models, function(m) tryCatch(stats::formula(m), error = function(e) NULL)),
+    specifications = x$meta, sample_info = x$sample_info,
+    note = "Versions refer to the source implementation and loaded engines at estimation time. Raw model objects retain engine-specific parameters.")
 }

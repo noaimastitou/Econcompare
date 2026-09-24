@@ -26,6 +26,44 @@
   invisible(TRUE)
 }
 
+# Reject numerical singularity without selecting variables for the researcher.
+.ec_validate_system_series <- function(data, variables, feature) {
+  x <- as.matrix(data[, variables, drop = FALSE])
+  constant <- vapply(seq_len(ncol(x)), function(j) all(x[, j] == x[1L, j]), logical(1))
+  if (any(constant)) .ec_stop(feature, " cannot use constant endogenous series: ",
+                            paste(variables[constant], collapse = ", "), ". Remove these series.")
+  # Normalize before centering to avoid overflow and dependence on measurement units.
+  x <- sweep(x, 2L, apply(abs(x), 2L, max), "/")
+  x <- sweep(x, 2L, colMeans(x), "-")
+  norms <- sqrt(colSums(x^2))
+  if (any(!is.finite(norms) | norms == 0)) .ec_stop(feature, " has numerically constant series. Review their scale.")
+  x <- sweep(x, 2L, norms, "/")
+  if (qr(x, tol = 1e-10)$rank < ncol(x)) {
+    .ec_stop(feature, " has collinear endogenous series (numerically rank-deficient): ",
+             paste(variables, collapse = ", "), ". Remove redundant series; no variable is removed automatically.")
+  }
+  invisible(TRUE)
+}
+
+.ec_validate_system_equation <- function(m, label) {
+  cf <- stats::coef(m)
+  ncoef <- if (is.matrix(cf)) nrow(cf) else length(cf)
+  if (!ncoef || is.null(m$rank) || m$rank < ncoef || any(!is.finite(cf))) {
+    .ec_stop(label, " is rank-deficient or has non-finite coefficients. Reduce the lag order or remove collinear variables; no coefficients are silently dropped.")
+  }
+  invisible(TRUE)
+}
+
+.ec_validate_system_residuals <- function(resids, label) {
+  z <- as.matrix(resids)
+  if (!length(z) || any(!is.finite(z))) .ec_stop(label, " has non-finite residuals.")
+  scales <- apply(abs(z), 2L, max)
+  if (any(scales == 0)) .ec_stop(label, " has singular residual covariance (a perfectly fitted equation). Review the specification.")
+  z <- sweep(z, 2L, scales, "/")
+  if (qr(z, tol = 1e-10)$rank < ncol(z)) .ec_stop(label, " has singular residual covariance. Review redundant series or deterministic relationships.")
+  invisible(TRUE)
+}
+
 .ec_exact_sample_info <- function(name, engine, prep, positions) {
   positions <- as.integer(positions)
   positions <- positions[is.finite(positions) & positions >= 1L & positions <= nrow(prep$data)]
@@ -68,6 +106,7 @@
   out <- list()
   for (nm in names(models)) {
     m <- models[[nm]]
+    .ec_validate_system_equation(m, paste0(toupper(engine), " equation ", nm))
     sm <- summary(m)
     co <- sm$coefficients
     if (is.null(co)) next
@@ -77,6 +116,7 @@
 }
 
 .ec_extract_mlm_equations <- function(mlm, engine) {
+  .ec_validate_system_equation(mlm, "VECM equations")
   cf <- tryCatch(stats::coef(mlm), error = function(e) NULL)
   if (is.null(cf)) .ec_stop("Could not extract VECM equation coefficients from the fitted system.")
   cf <- as.matrix(cf)
@@ -109,6 +149,9 @@
   k <- nrow(A[[1L]])
   p <- length(A)
   if (!all(vapply(A, function(z) nrow(z) == k && ncol(z) == k, logical(1)))) return(numeric())
+  if (!all(vapply(A, function(z) is.numeric(z) && all(is.finite(z)), logical(1)))) {
+    .ec_stop("Companion roots are unavailable: non-finite coefficient matrices. The fitted system may be singular; re-estimate a full-rank specification.")
+  }
   top <- do.call(cbind, A)
   if (p == 1L) return(eigen(top, only.values = TRUE)$values)
   lower <- cbind(diag(k * (p - 1L)), matrix(0, nrow = k * (p - 1L), ncol = k))
@@ -143,7 +186,7 @@ eco_ecm_run <- function(data, formula, time, p = 1L, q = 0L, q_by_var = NULL,
   .ec_validate_data_columns(data)
   if (!inherits(formula, "formula")) .ec_stop("`formula` must be a formula.")
   if (length(time) != 1L || !is.character(time) || !time %in% names(data)) .ec_stop("`time` must name one column in `data`.")
-  if (length(long_run_intercept) != 1L || is.na(long_run_intercept)) .ec_stop("`long_run_intercept` must be TRUE or FALSE.")
+  if (!is.logical(long_run_intercept) || length(long_run_intercept) != 1L || is.na(long_run_intercept)) .ec_stop("`long_run_intercept` must be TRUE or FALSE.")
   inference <- match.arg(inference)
 
   prep <- .ec_prepare_time_data(data, time)
@@ -156,6 +199,12 @@ eco_ecm_run <- function(data, formula, time, p = 1L, q = 0L, q_by_var = NULL,
   max_allowed <- max(0L, min(20L, floor((n - 5L) / 4L)))
   p <- .ec_validate_lag_order(p, "p", max_allowed)
   q_spec <- .ec_normalize_q_by_var(parts$x, q, q_by_var, max_allowed)
+
+  generated <- c(paste0("D_", parts$y), "ECT_L1",
+    if (p > 0L) paste0("D_", parts$y, "_L", seq_len(p)) else character(),
+    unlist(lapply(parts$x, function(v) c(paste0("D_", v),
+      if (q_spec[[v]] > 0L) paste0("D_", v, "_L", seq_len(q_spec[[v]])) else character())), use.names = FALSE))
+  .ec_validate_generated_names(generated)
 
   long_formula <- if (isTRUE(long_run_intercept)) formula else stats::update.formula(formula, . ~ . - 1)
   long_fit <- stats::lm(long_formula, data = prep$data, na.action = stats::na.fail)
@@ -191,7 +240,7 @@ eco_ecm_run <- function(data, formula, time, p = 1L, q = 0L, q_by_var = NULL,
     }
   }
   rownames(short) <- rownames(prep$data)
-  short_formula <- stats::reformulate(rhs, response = paste0("D_", parts$y))
+  short_formula <- stats::reformulate(vapply(rhs, .ec_quote_name, character(1)), response = .ec_quote_name(paste0("D_", parts$y)))
   cc <- stats::complete.cases(short)
   n_eff <- sum(cc)
   params <- 1L + length(rhs)
@@ -242,6 +291,7 @@ eco_ecm_run <- function(data, formula, time, p = 1L, q = 0L, q_by_var = NULL,
     ordinal_levels = attr(data, "econcompare_ordinal_levels"),
     data_n = nrow(data), created = Sys.time(), version = .ec_version()
   )
+  out$provenance <- .ec_provenance(out)
   class(out) <- "econcompare"
   out
 }
@@ -274,6 +324,7 @@ eco_var_lag_selection <- function(data, variables, time, lag_max = 8L,
   variables <- unique(as.character(variables))
   if (length(variables) < 2L) .ec_stop("VAR lag selection requires at least two endogenous variables.")
   .ec_require_complete_numeric_time_sample(prep, variables, "VAR lag selection")
+  .ec_validate_system_series(prep$data, variables, "VAR lag selection")
   deterministic <- match.arg(deterministic)
   lag_max <- .ec_validate_lag_order(lag_max, "lag_max", max(1L, min(20L, floor((nrow(prep$data) - 5L) / (length(variables) + 1L)))))
   if (lag_max < 1L) .ec_stop("`lag_max` must be at least 1 for VAR lag selection.")
@@ -284,6 +335,7 @@ eco_var_lag_selection <- function(data, variables, time, lag_max = 8L,
   }
   ans <- vars::VARselect(prep$data[, variables, drop = FALSE], lag.max = lag_max, type = deterministic)
   crit <- as.matrix(ans$criteria)
+  if (any(!is.finite(crit))) .ec_stop("VAR lag-selection criteria are non-finite. Review collinearity, residual covariance and the requested lag range.")
   tab <- data.frame(criterion = rep(rownames(crit), times = ncol(crit)), p = rep(seq_len(ncol(crit)), each = nrow(crit)), value = as.numeric(crit), stringsAsFactors = FALSE)
   selection <- data.frame(criterion = names(ans$selection), suggested_p = as.integer(ans$selection), stringsAsFactors = FALSE)
   list(criteria = tab, selection = selection,
@@ -295,6 +347,7 @@ eco_var_lag_selection <- function(data, variables, time, lag_max = 8L,
   cv <- as.matrix(methods::slot(jo, "cval"))
   labs <- rownames(cv)
   if (is.null(labs) || length(labs) != length(st)) labs <- paste0("rank hypothesis ", seq_along(st))
+  labs <- trimws(sub("[[:space:]]*[|][[:space:]]*$", "", labs))
   pick <- function(nm) if (nm %in% colnames(cv)) as.numeric(cv[, nm]) else rep(NA_real_, nrow(cv))
   data.frame(
     null_rank_hypothesis = labs,
@@ -317,7 +370,7 @@ eco_var_lag_selection <- function(data, variables, time, lag_max = 8L,
 #' @param time Time-index column.
 #' @param K Lag order of the VAR in levels used by `urca::ca.jo`; must be at least 2.
 #' @param type Johansen statistic: `"trace"` or `"eigen"`.
-#' @param ecdet Deterministic component in the cointegration procedure: `"none"`, `"const"`, or `"trend"`.
+#' @param ecdet Deterministic term in the cointegration relations: `"none"`, `"const"`, or `"trend"`. This is not a switch for all deterministic terms in the system.
 #' @param spec Johansen specification: `"transitory"` or `"longrun"`.
 #' @return A data.frame of test statistics and critical values. No rank is selected automatically.
 #' @export
@@ -330,6 +383,7 @@ eco_johansen_test <- function(data, variables, time, K = 2L,
   variables <- unique(as.character(variables))
   if (length(variables) < 2L) .ec_stop("Johansen diagnostics require at least two numeric series in levels.")
   .ec_require_complete_numeric_time_sample(prep, variables, "Johansen cointegration diagnostics")
+  .ec_validate_system_series(prep$data, variables, "Johansen cointegration diagnostics")
   type <- match.arg(type); ecdet <- match.arg(ecdet); spec <- match.arg(spec)
   max_k <- max(2L, min(20L, floor((nrow(prep$data) - 5L) / (length(variables) + 1L))))
   K <- .ec_validate_lag_order(K, "K", max_k)
@@ -338,7 +392,8 @@ eco_johansen_test <- function(data, variables, time, K = 2L,
   if ((nrow(prep$data) - K) <= approx_regressors + 5L) {
     .ec_stop("The Johansen specification is too highly parameterized for the available sample. Reduce K or the number of system variables.")
   }
-  jo <- urca::ca.jo(prep$data[, variables, drop = FALSE], type = type, ecdet = ecdet, K = K, spec = spec)
+  jo <- tryCatch(urca::ca.jo(prep$data[, variables, drop = FALSE], type = type, ecdet = ecdet, K = K, spec = spec),
+                 error = function(e) .ec_stop("Johansen estimation failed; review system rank and lag specification: ", conditionMessage(e)))
   .ec_johansen_table(jo, type, K, ecdet, spec)
 }
 
@@ -382,9 +437,13 @@ eco_system_models <- function() {
 #' @param deterministic For VAR: `"const"`, `"trend"`, `"both"`, or `"none"`.
 #' @param rank Cointegration rank for VECM. Required and must lie between 1 and `length(variables)-1`.
 #' @param johansen_type `"trace"` or `"eigen"` for the VECM Johansen object.
-#' @param ecdet VECM deterministic component: `"none"`, `"const"`, or `"trend"`.
+#' @param ecdet Deterministic term in the cointegration relations: `"none"`, `"const"`, or `"trend"`. This is not a switch for all deterministic terms in the system.
 #' @param spec VECM Johansen specification: `"transitory"` or `"longrun"`.
 #' @return An `econcompare` object with equation-level coefficient wrappers and the retained system fit.
+#' @details Constant or numerically collinear endogenous series, aliased equation
+#' coefficients and singular residual covariance are rejected. No variable or lag
+#' is removed automatically. Engine warnings are retained in `warnings` and are
+#' also signalled normally. The permitted VECM rank is 1 through k-1.
 #' @export
 eco_system_run <- function(data, variables, time, model = c("var", "vecm"), p = 2L,
                            deterministic = c("const", "trend", "both", "none"),
@@ -400,6 +459,7 @@ eco_system_run <- function(data, variables, time, model = c("var", "vecm"), p = 
   if (length(variables) < 2L) .ec_stop("VAR/VECM systems require at least two endogenous variables.")
   if (time %in% variables) .ec_stop("The time index is structural metadata and cannot be an endogenous system variable.")
   .ec_require_complete_numeric_time_sample(prep, variables, toupper(model))
+  .ec_validate_system_series(prep$data, variables, toupper(model))
   k <- length(variables); n <- nrow(prep$data)
   max_p <- max(1L, min(20L, floor((n - 5L) / (k + 1L))))
   p <- .ec_validate_lag_order(p, "p", max_p)
@@ -417,13 +477,22 @@ eco_system_run <- function(data, variables, time, model = c("var", "vecm"), p = 
 
   failures <- data.frame(model = character(), engine = character(), message = character(), stringsAsFactors = FALSE)
   warnings <- data.frame(model = character(), engine = character(), message = character(), stringsAsFactors = FALSE)
+  capture_warning <- function(w) {
+    warnings <<- rbind(warnings, data.frame(model = toupper(model), engine = model,
+                                           message = conditionMessage(w), stringsAsFactors = FALSE))
+  }
+  run_engine <- function(expr) {
+    tryCatch(withCallingHandlers(expr, warning = capture_warning),
+             error = function(e) .ec_stop(toupper(model), " estimation failed: ", conditionMessage(e)))
+  }
   system_fit <- NULL; jo <- NULL; rank_used <- NULL; model_wrappers <- list(); used_positions <- integer()
 
   if (identical(model, "var")) {
     deterministic <- det_choice
-    raw <- vars::VAR(prep$data[, variables, drop = FALSE], p = p, type = deterministic)
+    raw <- run_engine(vars::VAR(prep$data[, variables, drop = FALSE], p = p, type = deterministic))
     system_fit <- raw
-    model_wrappers <- .ec_extract_lm_equations(raw$varresult, "var")
+    model_wrappers <- run_engine(.ec_extract_lm_equations(raw$varresult, "var"))
+    .ec_validate_system_residuals(stats::residuals(raw), "VAR")
     if (!length(model_wrappers)) .ec_stop("VAR was fitted but its equation results could not be extracted.")
     used_positions <- seq.int(p + 1L, n)
     det_note <- deterministic
@@ -431,17 +500,19 @@ eco_system_run <- function(data, variables, time, model = c("var", "vecm"), p = 
     if (!requireNamespace("urca", quietly = TRUE)) .ec_stop("VECM estimation requires optional package `urca` in addition to `vars`.")
     johansen_type <- match.arg(johansen_type); ecdet <- match.arg(ecdet); spec <- match.arg(spec)
     if (p < 2L) .ec_stop("VECM requires `p >= 2`, where p is the VAR lag order in levels (K in Johansen notation).")
-    if (is.null(rank) || length(rank) != 1L || !is.finite(rank) || abs(rank - round(rank)) > 1e-8) {
+    if (!is.numeric(rank) || length(rank) != 1L || !is.finite(rank) || abs(rank - round(rank)) > 1e-8) {
       .ec_stop("VECM requires an explicit integer `rank`. Use eco_johansen_test() as one input to the rank decision; econcompare does not select it automatically.")
     }
+    if (rank < 1 || rank >= k) .ec_stop("VECM `rank` must be between 1 and number_of_variables - 1 (here 1 to ", k - 1L, ").")
     rank <- as.integer(rank)
-    if (rank < 1L || rank >= k) .ec_stop("VECM `rank` must be between 1 and number_of_variables - 1 (here 1 to ", k - 1L, ").")
-    jo <- urca::ca.jo(prep$data[, variables, drop = FALSE], type = johansen_type, ecdet = ecdet, K = p, spec = spec)
-    cr <- urca::cajorls(jo, r = rank)
-    vr <- vars::vec2var(jo, r = rank)
+    jo <- run_engine(urca::ca.jo(prep$data[, variables, drop = FALSE], type = johansen_type, ecdet = ecdet, K = p, spec = spec))
+    cr <- run_engine(urca::cajorls(jo, r = rank))
+    .ec_validate_system_equation(cr$rlm, "VECM equations")
+    .ec_validate_system_residuals(stats::residuals(cr$rlm), "VECM")
+    vr <- run_engine(vars::vec2var(jo, r = rank))
     system_fit <- list(johansen = jo, cajorls = cr, vec2var = vr)
     class(system_fit) <- c("econcompare_vecm_system", "list")
-    model_wrappers <- .ec_extract_mlm_equations(cr$rlm, "vecm")
+    model_wrappers <- run_engine(.ec_extract_mlm_equations(cr$rlm, "vecm"))
     if (!length(model_wrappers)) .ec_stop("VECM was fitted but its equation results could not be extracted.")
     rank_used <- rank
     used_positions <- seq.int(p + 1L, n)
@@ -491,6 +562,7 @@ eco_system_run <- function(data, variables, time, model = c("var", "vecm"), p = 
     type_overrides = attr(data, "econcompare_type_overrides"), ordinal_levels = attr(data, "econcompare_ordinal_levels"),
     data_n = nrow(data), created = Sys.time(), version = .ec_version()
   )
+  out$provenance <- .ec_provenance(out)
   class(out) <- c("econcompare_system", "econcompare")
   out
 }
@@ -506,14 +578,14 @@ eco_vecm_rank_test <- function(x) {
 
 #' Essential diagnostics for VAR/VECM systems
 #' @param x An object returned by [eco_system_run()].
-#' @param serial_lags Portmanteau residual-autocorrelation lag order. For the asymptotic test it must be greater than the fitted VAR lag order.
-#' @return A list containing root information and, when available, a multivariate residual serial-correlation test.
+#' @param serial_lags Portmanteau residual-autocorrelation lag order. It must exceed the fitted VAR lag order and be smaller than the residual sample size.
+#' @return A list containing root information and a multivariate residual serial-correlation table, including degrees of freedom (`df`). Unavailable diagnostics have an explicit explanatory note.
 #' @export
 eco_system_diagnostics <- function(x, serial_lags = 8L) {
   if (!inherits(x, "econcompare_system") || !identical(x$analysis_type, "time_series_system")) {
     .ec_stop("`x` must be a VAR/VECM result returned by eco_system_run().")
   }
-  if (length(serial_lags) != 1L || !is.finite(serial_lags) || serial_lags < 1L || abs(serial_lags - round(serial_lags)) > 1e-8) {
+  if (!is.numeric(serial_lags) || length(serial_lags) != 1L || !is.finite(serial_lags) || serial_lags < 1L || serial_lags > .Machine$integer.max || abs(serial_lags - round(serial_lags)) > 1e-8) {
     .ec_stop("`serial_lags` must be one positive integer.")
   }
   serial_lags <- as.integer(serial_lags)
@@ -526,7 +598,14 @@ eco_system_diagnostics <- function(x, serial_lags = 8L) {
   family <- x$temporal_family
   raw <- if (family == "var") x$system_model else x$system_model$vec2var
   A <- if (family == "var") tryCatch(vars::Acoef(raw), error = function(e) list()) else raw$A
-  roots <- .ec_companion_roots(A)
+  if (!is.null(raw$obs) && serial_lags >= raw$obs) {
+    .ec_stop("`serial_lags` must be smaller than the number of residual observations (", raw$obs, ").")
+  }
+  root_error <- NULL
+  roots <- tryCatch(.ec_companion_roots(A), error = function(e) {
+    root_error <<- conditionMessage(e)
+    numeric()
+  })
   roots_df <- data.frame(root = seq_along(roots), modulus = Mod(roots), stringsAsFactors = FALSE)
   root_note <- if (family == "var") {
     if (!length(roots)) {
@@ -540,16 +619,21 @@ eco_system_diagnostics <- function(x, serial_lags = 8L) {
     "A cointegrated VECM intentionally permits common stochastic trends, so unit roots in the levels companion representation are not interpreted with the stationary-VAR rule."
   }
 
+  if (!length(roots)) root_note <- "Companion-root information is unavailable; stability has not been assessed."
+  if (!is.null(root_error)) root_note <- paste("Unavailable:", root_error)
+
   serial <- NULL
   if (!requireNamespace("vars", quietly = TRUE)) {
-    serial <- data.frame(test = "multivariate Portmanteau", statistic = NA_real_, p.value = NA_real_, note = "Unavailable: install `vars`.", stringsAsFactors = FALSE)
+    serial <- data.frame(test = "multivariate Portmanteau", statistic = NA_real_, p.value = NA_real_, df = NA_real_, note = "Unavailable: install `vars`.", stringsAsFactors = FALSE)
   } else {
     st <- tryCatch(vars::serial.test(raw, lags.pt = serial_lags, type = "PT.asymptotic"), error = function(e) e)
     if (inherits(st, "error")) {
-      serial <- data.frame(test = "multivariate Portmanteau", statistic = NA_real_, p.value = NA_real_, note = paste("Unavailable:", conditionMessage(st)), stringsAsFactors = FALSE)
+      serial <- data.frame(test = "multivariate Portmanteau", statistic = NA_real_, p.value = NA_real_, df = NA_real_, note = paste("Unavailable:", conditionMessage(st)), stringsAsFactors = FALSE)
     } else {
       h <- st$serial
-      serial <- data.frame(test = paste0("multivariate Portmanteau (lags ", serial_lags, ")"), statistic = unname(as.numeric(h$statistic)[1L]), p.value = h$p.value, note = if (h$p.value < .05) "Evidence of residual serial correlation at the 5% level." else "No evidence of residual serial correlation at the 5% level.", stringsAsFactors = FALSE)
+      valid <- length(h$p.value) == 1L && is.finite(h$p.value) &&
+        length(h$statistic) == 1L && is.finite(h$statistic)
+      serial <- data.frame(test = paste0("multivariate Portmanteau (lags ", serial_lags, ")"), statistic = unname(as.numeric(h$statistic)[1L]), p.value = h$p.value, df = unname(as.numeric(h$parameter)[1L]), note = if (!valid) "Unavailable: non-finite Portmanteau result; review system rank and residual covariance." else if (h$p.value < .05) "Evidence of residual serial correlation at the 5% level." else "No evidence of residual serial correlation at the 5% level.", stringsAsFactors = FALSE)
     }
   }
   list(roots = roots_df, root_note = root_note, serial_correlation = serial)

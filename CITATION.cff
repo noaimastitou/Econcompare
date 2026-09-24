@@ -1,11 +1,10 @@
 cff-version: 1.2.0
 message: "If you use econcompare in research, please cite the software repository and the version used."
-title: "econcompare: cross-sectional and explanatory time-series econometrics in R"
+title: "econcompare: cross-sectional, explanatory time-series and panel econometrics in R"
 type: software
-version: 0.11.0
-date-released: 2026-09-16
+version: 0.14.4
 authors:
-  - family-names: "Contributors"
-    given-names: "econcompare"
+  - family-names: "ASTITOU"
+    given-names: "Noaïm"
 license: MIT
 repository-code: "https://github.com/noaimastitou/Econcompare"

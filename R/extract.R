@@ -85,7 +85,13 @@
   if (is.null(co)) co <- sm$coef
   if (is.null(co)) co <- sm$estimate
   if (is.null(co)) .ec_stop("Could not find a coefficient table for model class: ", paste(class(model), collapse = "/"))
-  .ec_bind_fit(.ec_matrix_to_df(co, name), model, missing)
+  out <- .ec_matrix_to_df(co, name)
+  b <- stats::coef(model)
+  absent <- if (is.numeric(b) && is.null(dim(b))) setdiff(names(b)[is.na(b)], out$term) else character()
+  if (length(absent)) out <- rbind(out, data.frame(model = name, term = absent,
+    estimate = NA_real_, std.error = NA_real_, statistic = NA_real_, p.value = NA_real_))
+  out$term_status <- ifelse(is.na(out$estimate), "not estimable: aliased coefficient", "estimated")
+  .ec_bind_fit(out, model, missing)
 }
 
 .ec_extract_fixest <- function(model, name, missing = "na") {
@@ -139,7 +145,8 @@
   out
 }
 
-.ec_extract <- function(model, name, missing = "na") {
+.ec_extract_raw <- function(model, name, missing = "na") {
+  if (!is.null(attr(model, "econcompare_panel_table"))) return(.ec_extract_panel(model, name))
   if (inherits(model, "econcompare_system_equation")) return(.ec_extract_system_equation(model, name, missing))
   ti <- .ec_extract_time_inference(model, name, missing)
   if (!is.null(ti)) return(ti)
@@ -149,6 +156,12 @@
   if (inherits(model, "multinom")) return(.ec_extract_multinom(model, name, missing))
   if (inherits(model, "polr")) return(.ec_extract_polr(model, name, missing))
   .ec_extract_standard(model, name, missing)
+}
+
+.ec_extract <- function(model, name, missing = "na") {
+  out <- .ec_extract_raw(model, name, missing)
+  if (nrow(out) && !"term_status" %in% names(out)) out$term_status <- "estimated"
+  out
 }
 
 .ec_empty_compare <- function() {
@@ -175,11 +188,25 @@
 
 .ec_decorate_extract <- function(out, x) {
   if (is.null(out) || !nrow(out)) return(out)
+  if (identical(x$analysis_type, "panel")) {
+    out$coefficient_scale <- vapply(out$model, function(nm) .ec_meta_value(x, nm, "coefficient_scale", "response units"), character(1))
+    out$reference_distribution <- vapply(out$model, function(nm) .ec_meta_value(x, nm, "reference_distribution", "Student t"), character(1))
+    out$term_label <- out$term
+    for (nm in names(x$mean_terms)) {
+      m <- x$mean_terms[[nm]]; ii <- which(out$model == nm & out$term %in% m$term)
+      out$term_label[ii] <- paste0("Individual mean of ", m$variable[match(out$term[ii], m$term)])
+    }
+    out$inference <- x$inference
+    out$groups <- vapply(out$model, function(nm) as.numeric(x$meta[[nm]]$groups), numeric(1))
+    out$observation_unit <- vapply(out$model, function(nm) .ec_meta_value(x, nm, "observation_unit", "individual-period"), character(1))
+    out$covariance_note <- vapply(out$model, function(nm) .ec_meta_value(x, nm, "covariance_note", "See panel metadata"), character(1))
+    out$sample_comparable <- if (isTRUE(x$sample_comparable)) "same source rows and observation unit; estimands may differ" else "different source samples or observation units"
+  }
   out$engine <- vapply(out$model, function(nm) .ec_meta_value(x, nm, "engine", nm), character(1))
   out$outcome_type <- vapply(out$model, function(nm) .ec_meta_value(x, nm, "outcome_type", if (is.null(x$outcome_type)) "" else x$outcome_type), character(1))
   out$family <- vapply(out$model, function(nm) .ec_meta_value(x, nm, "family", ""), character(1))
   out$comparison_note <- vapply(out$model, function(nm) .ec_meta_value(x, nm, "comparison_note", ""), character(1))
-  if (x$analysis_type %in% c("time_series", "time_series_system")) {
+  if (isTRUE(x$analysis_type %in% c("time_series", "time_series_system"))) {
     if (identical(x$analysis_type, "time_series")) out$inference <- vapply(out$model, function(nm) .ec_meta_value(x, nm, "inference", "classical"), character(1))
     out$sample_comparable <- if (isTRUE(x$sample_comparable)) "same estimation sample across compared models" else "different estimation samples — interpret AIC/BIC comparisons cautiously"
   }
@@ -188,7 +215,7 @@
 
 #' Compare collected model results
 #'
-#' @param x An `econcompare` object returned by [eco_run()].
+#' @param x An `econcompare` object returned by an estimation API. Aliased linear coefficients remain visible as NA with term_status.
 #' @param empty_stats How to handle statistics returned with length 0. `"na"`
 #'   converts them to `NA_real_`; `"error"` stops and reports the statistic.
 #' @param error_policy How extraction failures are handled. `"stop"` preserves

@@ -1,3 +1,121 @@
+# econcompare 0.14.4
+
+- Help bubbles render in a fixed body-level layer, with viewport positioning, keyboard focus and Escape dismissal.
+- Separate temporal diagnostic controls from result rendering, preventing ADF/KPSS result updates from resetting series selections in single-equation and VAR/VECM screens.
+- Remove the panel Interpretation tab and its content; no relocation to other tabs.
+- Panel diagnostics now select a fitted model first, then its available tests. Only that model is tested; required companion models remain available for explicit FE/pooled and FE/RE comparisons.
+- Changing the panel diagnostic model clears previous results. Public batch diagnostic APIs and econometric estimators remain unchanged.
+- Add regression tests and update prior UI expectations. Runtime R/Shiny and visual browser checks remain required.
+
+# econcompare 0.14.3
+
+- Panel HTML diagnostics="all" selects the compatible diagnostic families, including Hausman, Mundlak and IV first stages when available; limitations remain visible.
+- HTML reports retain estimation warnings/failures alongside extraction issues, with their stage.
+- No invitation to run unavailable panel diagnostics in Shiny.
+- Shared specialized-panel fixture moved to a test helper for filtered test runs.
+- HTML diagnostic p-values use the same formatter as Shiny.
+- Panel objects now record their creation timestamp.
+- Added targeted regression tests. Runtime validation remains required before release.
+
+# econcompare 0.14.2
+
+- Contextual panel diagnostic choices, with explicit limitations for unsupported estimators.
+- Unavailable diagnostics report no inference performed and no inference degrees of freedom.
+- Suspended CD raw p-values are isolated in audit disclosures in Shiny and HTML exports.
+- Hide empty model-specific interpretation sections and wholly unavailable fit metrics in displays only.
+- Preserve valid inference, missing-value, endogenous-variable and instrument selections on panel control rebuilds.
+- Restrict exact conditional logit to its supported inference choices without silently switching inference.
+- Add model-specific inference tables, run provenance disclosure and clearer transformed-sample messages.
+- Add regression tests for contextual presentation, separation and Poisson nonconvergence.
+- Runtime tests and interactive Shiny validation remain a release gate; see VALIDATION_0.14.2.md.
+
+# econcompare 0.14.1 (source hotfix candidate)
+
+- Bind coxph, Surv and strata locally when invoking survival::clogit. This fixes
+  the reported unqualified coxph lookup path without attaching survival globally.
+- Add a namespace-only regression test and make the direct reference test explicit
+  about its own survival bindings.
+- R execution remains unavailable in the preparation environment; validate in a
+  fresh R session without library(survival). See VALIDATION_0.14.1.md.
+
+# econcompare 0.14.0 (source candidate for audit)
+
+- Add exact conditional panel logit (binary), Poisson individual effects (counts)
+  and individual FE-IV/2SLS with explicit endogenous regressors/instruments.
+- Preserve first stages, coefficient scales, observation exclusions and exact row
+  maps; expose the new families and controls in Shiny.
+- Distinguish diagnostic availability reasons using structured reason codes.
+- Suspend standard Pesaran CD conclusions after time/two-way effects; retain raw
+  engine results for audit, without presenting their p-values as calibrated.
+- Report Mundlak inference and degrees of freedom; show readable mean-term labels.
+- Correct sample warnings when source rows are identical but units differ.
+- Add reference, failure and Shiny workflow tests; extend GitHub CI dependencies.
+- This source candidate has not passed R runtime tests in the preparation
+  environment (R is unavailable). See VALIDATION_0.14.0.md before release.
+
+# econcompare 0.13.0 (source candidate)
+
+- Add numeric/logical first differences, equally weighted between estimation and
+  correlated random effects (Mundlak) to the panel API and Shiny catalogue.
+- Record consecutive source-row pairs and individual-mean membership; preserve
+  the original calendar through missing-value exclusions. Never bridge gaps.
+- Distinguish contributing source rows, transformed sample sizes and observation
+  units; retain absorbed terms and reject unidentified designs explicitly.
+- Add selected-covariance Mundlak contrasts and an optional joint mean Wald F test.
+- Explain estimands and exact covariance conventions in Shiny and HTML; mark
+  BG/CD unavailable for the new FD/between representations.
+- Add reference and edge-case tests. Runtime validation remains required; the
+  development environment has no R executable. See VALIDATION_0.13.0.md.
+
+# econcompare 0.12.2
+
+- Rejects transformed temporal responses and no-intercept input formulas explicitly instead of silently rebuilding a different model. ECM retains its explicit long_run_intercept option. Precomputed transformed columns remain supported.
+- Detects generated lag/difference name collisions before constructing temporal or ECM data.
+- Retains aliased OLS/WLS coefficient rows as NA with term_status and a captured warning; aligns term-status columns across extractors.
+- Quotes literal column names when constructing UI and temporal formulas.
+- Captures Shiny run data, configuration and timestamp; flags outdated results, blocks new diagnostics until re-estimation, and uses run snapshots for stationarity tests. Clears diagnostic outputs when their parameters change.
+- Separates expected panel absorption information from estimation warnings; keeps terms visible.
+- Uses scientific notation for tiny nonzero displayed numbers, integer panel counts and an explicit threshold for zero p-values in coefficient/panel tables.
+- Adds readable panel date bounds, index_valid distinct from balanced schedules, and suggestions requiring explicit index confirmation.
+- Records source version, R/engine versions, requested/fitted formulas, specifications and sample audit in provenance.
+- Adds targeted regression tests and a manual CI trigger. Runtime verification remains required before release; see VALIDATION_0.12.2.md.
+
+# econcompare 0.12.1
+
+- Harmonizes panel results with existing Shiny components: side-by-side coefficients, model-fit tab, audit cards, styled diagnostic tables and explicit empty states.
+- Replaces the overflowing sidebar audit table with a wrapping vertical summary.
+- Wraps all panel detail tables in bounded, keyboard-focusable horizontal scroll regions; warning text wraps and tab navigation adapts to narrow screens.
+- Uses readable estimator labels in the interface while preserving API engine names and raw model objects.
+- Clarifies duplicate individual-period keys for quarterly data indexed by year.
+- Presentation update only: estimation and diagnostic engines are unchanged from 0.12.0. R/Shiny runtime validation remains pending in the preparation environment.
+
+# econcompare 0.12.0
+
+- Adds explicit panel audit/model/run/diagnostic APIs using optional plm.
+- Adds pooled OLS, individual/time/two-way fixed effects and individual random effects.
+- Provides classical and individual-cluster HC1 inference with explicit degrees of freedom.
+- Preserves raw models, exact input row positions, common missingness exclusions, model-specific singleton exclusions and absorbed-term status.
+- Rejects invalid index pairs, unsupported formulas, unidentified regressors and degenerate inference.
+- Adds F, panel LM, serial BG, Pesaran CD and optional classical/robust auxiliary Hausman diagnostics with applicability explanations.
+- Adds advisory panel candidates, an explicit Shiny panel workflow and panel HTML output.
+- Adds plm-reference regression tests, error cases, Shiny coverage, help pages and a runnable tutorial. CI requires plm and shiny.
+- Retains the corrected 0.11.1 code. No global UI redesign, dynamic panel or nonlinear panel estimators are added.
+- Validation candidate only: runtime tests and R CMD check are pending; see VALIDATION_0.12.0.md.
+
+# econcompare 0.11.1
+
+- Fixes cross-sectional extraction and Shiny rendering when analysis_type is absent: new eco_run objects identify cross_section explicitly, and temporal branches safely handle older objects.
+
+- Normalizes temporal working data to data.frame before assigning row identities, avoiding deprecated tibble row-name assignment while preserving temporal ordering.
+- Rejects constant or numerically collinear system series, aliased equation coefficients and singular residual covariance rather than presenting incomplete VAR/VECM coefficient tables.
+- Retains system-engine warnings in the returned object while still signalling them to the caller.
+- Makes companion-root failures explicit for older singular objects; guards non-finite Portmanteau results and excessive diagnostic horizons, and reports test degrees of freedom.
+- Cleans trailing separators from Johansen hypothesis labels and clarifies deterministic terms and VECM parameterizations in the interface.
+- Hardens integer validation against overflow and invalid rank/horizon types.
+- Adds regression coverage for VAR agreement with vars, all four VAR deterministic specifications, VECM K=4 and ranks 1/2, row identities, tibble inputs, invalid systems, ECM ECT alignment and HAC inference.
+- Updates maintainer metadata and current-version documentation. No panel models or new estimator family are added.
+- Validation status: the 0.11.1 R tests and R CMD check must run before publication; successful 0.11.0 examples do not certify the modified release.
+
 # econcompare 0.11.0
 
 - Adds a transparent two-step single-equation ECM through `eco_ecm_run()`, with the long-run levels relationship retained separately through `eco_ecm_long_run()`. The first-step levels regression is explicitly not treated as proof of cointegration.

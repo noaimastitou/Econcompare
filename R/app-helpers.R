@@ -18,7 +18,7 @@
 
 .ec_formula <- function(y, x) {
   if (!length(x)) .ec_stop("Select at least one explanatory variable.")
-  stats::reformulate(x, response = y)
+  stats::reformulate(vapply(x, .ec_quote_name, character(1)), response = .ec_quote_name(y))
 }
 
 .ec_help_icon <- function(text) {
@@ -269,8 +269,7 @@
     ".ec-label-text{font-weight:740;font-size:14px;color:var(--ec-text)}",
     ".ec-field-caption{font-size:12px;line-height:1.45;color:var(--ec-muted);margin:-2px 0 8px}",
     ".ec-q{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:var(--ec-accent-soft);color:var(--ec-accent);font-size:11px;font-weight:900;cursor:help;position:relative;border:1px solid #cfe0ff}",
-    ".ec-q:hover::after,.ec-q:focus::after{content:attr(data-tip);position:absolute;left:24px;top:-6px;min-width:260px;max-width:360px;background:#11243c;color:#fff;padding:10px 12px;border-radius:12px;font-size:12px;line-height:1.45;font-weight:500;box-shadow:0 12px 30px rgba(0,0,0,.18);z-index:30;white-space:normal}",
-    ".ec-q:hover::before,.ec-q:focus::before{content:'';position:absolute;left:18px;top:5px;border-top:7px solid transparent;border-bottom:7px solid transparent;border-right:7px solid #11243c;z-index:31}",
+    ".ec-help-tooltip{position:fixed;z-index:2147483647;box-sizing:border-box;width:340px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow:auto;background:#11243c;color:#fff;padding:10px 12px;border-radius:12px;font-size:12px;line-height:1.45;font-weight:500;box-shadow:0 12px 30px rgba(0,0,0,.18);white-space:normal;overflow-wrap:anywhere;pointer-events:none}",
     ".btn-primary{background:linear-gradient(135deg,#132238 0%,#27456f 100%)!important;border:0!important;border-radius:14px!important;font-weight:760!important;padding:11px 14px!important;box-shadow:0 10px 20px rgba(19,34,56,.14)!important}",
     ".btn-default{border-radius:14px!important;border:1px solid var(--ec-border)!important;background:#fff!important}",
     ".form-group,.selectize-control{max-width:100%;min-width:0}.form-control,.selectize-input{border-radius:14px!important;border:1px solid var(--ec-border)!important;box-shadow:none!important;padding-top:10px!important;padding-bottom:10px!important;max-width:100%;min-width:0;box-sizing:border-box}.selectize-input{overflow-wrap:anywhere}.selectize-input>div{display:inline-block;max-width:calc(100% - 8px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:top}.selectize-input>input{max-width:100%!important}",
@@ -313,6 +312,8 @@
     ".ec-explore-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.ec-explore-card{border:1px solid var(--ec-border);border-radius:18px;padding:16px;background:#fff;margin-bottom:14px;min-width:0;max-width:100%}.ec-explore-card h4{font-size:15px;font-weight:820;margin:0 0 5px}.ec-explore-wide{margin-top:0}.shiny-plot-output{width:100%!important;max-width:100%!important;min-width:0!important;overflow:hidden}",
     ".ec-profile-list{border-top:1px solid var(--ec-border)}.ec-profile-row{display:flex;justify-content:space-between;gap:16px;padding:8px 2px;border-bottom:1px solid var(--ec-border);font-size:12px}.ec-profile-row span{color:var(--ec-muted)}.ec-profile-row span,.ec-profile-row b{min-width:0;overflow-wrap:anywhere}.ec-profile-row b{text-align:right;font-variant-numeric:tabular-nums}",
     ".ec-rel-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;min-width:0}.ec-corr-note{background:#f8fbff;border:1px solid var(--ec-border);border-radius:12px;padding:10px 12px;font-size:12px;margin-bottom:8px;overflow-wrap:anywhere}.ec-corr-note span{color:var(--ec-muted)}.ec-check-list{margin:8px 0 0;padding-left:20px;color:#3a4b61;font-size:12.5px;line-height:1.55}.ec-check-list li{margin-bottom:7px}.ec-ordinal-settings{min-width:0;max-width:100%}.tab-content,.tab-pane,.ec-section{min-width:0;max-width:100%}",
+    ".ec-panel-summary{width:100%;min-width:0;box-sizing:border-box}.ec-panel-summary .ec-profile-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}.ec-panel-results{min-width:0;max-width:100%}.ec-panel-results .nav-tabs{display:flex;flex-wrap:wrap}.ec-panel-results .nav-tabs>li{float:none}.ec-panel-results .tab-pane{padding-top:14px}.ec-panel-results .ec-chip-wrap{margin-bottom:14px}",
+    ".ec-panel-table table th,.ec-panel-table table td{white-space:normal;overflow-wrap:anywhere;vertical-align:top;min-width:100px;max-width:360px}.ec-panel-table:focus-visible{outline:2px solid var(--ec-accent);outline-offset:2px}.ec-panel-results .ec-explore-card{overflow-wrap:anywhere}.ec-panel-summary .ec-profile-row b{font-variant-numeric:tabular-nums}",
     "@media(max-width:1080px){.ec-top{flex-direction:column}.ec-metric-stack{width:auto;grid-template-columns:repeat(2,minmax(0,1fr))}.ec-grid{grid-template-columns:1fr}.ec-sidebar{position:static}.ec-diag-grid{grid-template-columns:1fr}.ec-explore-grid{grid-template-columns:1fr}.ec-explore-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}",
     "@media(max-width:640px){.ec-shell{padding:12px}.ec-hero{padding:20px}.ec-title{font-size:28px}.ec-metric-stack{grid-template-columns:1fr 1fr}.ec-rel-controls{grid-template-columns:1fr}.ec-main-head{flex-direction:column}.ec-table-wrap table{min-width:620px}.ec-table-compact table{min-width:0}}"
   )
@@ -332,4 +333,8 @@
 
 .ec_coef_shiny_table <- function(df) {
   shiny::HTML(.ec_coef_html_table(df))
+}
+
+.ec_app_tooltip_js <- function() {
+  "(function () {\n  if (window.ecHelpInstalled) return;\n  window.ecHelpInstalled = true;\n  let active = null, tip = null;\n  function hide() {\n    if (active) active.removeAttribute('aria-describedby');\n    if (tip) tip.remove();\n    active = null; tip = null;\n  }\n  function show(el) {\n    if (active === el) return;\n    hide(); active = el;\n    tip = document.createElement('div');\n    tip.id = 'ec-help-tooltip'; tip.className = 'ec-help-tooltip';\n    tip.setAttribute('role', 'tooltip');\n    tip.textContent = el.getAttribute('data-tip') || '';\n    document.body.appendChild(tip);\n    active.setAttribute('aria-describedby', tip.id);\n    const box = el.getBoundingClientRect();\n    const width = tip.offsetWidth, height = tip.offsetHeight;\n    let left = box.right + 10;\n    if (left + width > window.innerWidth - 8) left = box.left - width - 10;\n    left = Math.max(8, Math.min(left, window.innerWidth - width - 8));\n    const top = Math.max(8, Math.min(box.top, window.innerHeight - height - 8));\n    tip.style.left = left + 'px'; tip.style.top = top + 'px';\n  }\n  function target(e) { return e.target.closest ? e.target.closest('.ec-q[data-tip]') : null; }\n  document.addEventListener('mouseover', function (e) { const el = target(e); if (el) show(el); });\n  document.addEventListener('mouseout', function (e) { if (active && target(e) === active && !active.contains(e.relatedTarget)) hide(); });\n  document.addEventListener('focusin', function (e) { const el = target(e); if (el) show(el); });\n  document.addEventListener('focusout', function (e) { if (target(e) === active) hide(); });\n  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') hide(); });\n  document.addEventListener('scroll', hide, true);\n  window.addEventListener('resize', hide);\n})();\n"
 }

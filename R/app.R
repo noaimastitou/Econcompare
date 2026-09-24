@@ -26,6 +26,15 @@ eco_app <- function(data, launch.browser = getOption("shiny.launch.browser", int
   if (!initial_type %in% c("continuous", "binary", "nominal", "ordinal")) initial_type <- "continuous"
   registry <- eco_models()
   structure_info <- eco_data_structure(data)
+  if (identical(structure_info$structure, "panel_candidate")) {
+    indexes <- unique(c(structure_info$panel_candidates$id, structure_info$panel_candidates$time))
+    candidates <- setdiff(numeric_vars, c(indexes, "period", "quarter", "year"))
+    if (length(candidates)) {
+      initial_y <- candidates[1L]
+      initial_type <- .ec_outcome_type(data[[initial_y]])
+      if (!initial_type %in% c("continuous", "binary", "nominal", "ordinal")) initial_type <- "continuous"
+    }
+  }
   initial_mode <- if (identical(structure_info$structure, "time_series")) "time_series" else "cross_section"
   initial_time <- if (!is.null(structure_info$time_variable)) structure_info$time_variable else ""
 

@@ -12,7 +12,7 @@ eco_johansen_test(data, variables, time, K = 2L,
 \item{time}{Time-index column.}
 \item{K}{Lag order of the VAR in levels used by the Johansen procedure.}
 \item{type}{\code{"trace"} or \code{"eigen"}.}
-\item{ecdet}{Deterministic component: \code{"none"}, \code{"const"}, or \code{"trend"}.}
+\item{ecdet}{Deterministic term in the cointegration relations: \code{"none"}, \code{"const"}, or \code{"trend"}.}
 \item{spec}{Johansen specification: \code{"transitory"} or \code{"longrun"}.}
 }
 \value{A data.frame with rank-null hypotheses, test statistics and critical values.}

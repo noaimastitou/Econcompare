@@ -1,16 +1,16 @@
 .ec_app_ui <- function(data, all_vars, numeric_vars, initial_y, initial_type, structure_info, initial_mode, initial_time) {
   shiny::fluidPage(
-    shiny::tags$head(shiny::tags$style(shiny::HTML(.ec_app_css()))),
+    shiny::tags$head(shiny::tags$style(shiny::HTML(.ec_app_css())), shiny::tags$script(shiny::HTML(.ec_app_tooltip_js()))),
     shiny::div(class = "ec-shell",
       shiny::div(class = "ec-top",
         shiny::div(class = "ec-hero",
           shiny::div(class = "ec-kicker", "Interactive econometrics workspace"),
           shiny::h1(class = "ec-title", "econcompare lab"),
           shiny::div(class = "ec-sub",
-            "Explore the data, identify its observational structure, and compare econometric models suited to cross-sectional or explanatory time-series analysis. Time-series tools focus on relationships among variables over time, not forecasting."
+            "Explore the data, identify its observational structure, and compare econometric models suited to cross-sectional, explanatory time-series or static panel analysis. Time-series tools focus on relationships among variables over time, not forecasting."
           ),
           shiny::div(class = "ec-hero-pills",
-            shiny::div(class = "ec-pill", "Cross-section + time-series econometrics"),
+            shiny::div(class = "ec-pill", "Cross-section + time-series + panel"),
             shiny::div(class = "ec-pill", "Side-by-side coefficients"),
             shiny::div(class = "ec-pill", "Explore data first"),
             shiny::div(class = "ec-pill", "Warnings captured explicitly")
@@ -33,9 +33,9 @@
               .ec_labeled(
                 "Data structure / econometric mode",
                 "econcompare makes a conservative suggestion from the data, but the researcher confirms the mode. Time-series mode requires one explicit, unique temporal index and models relationships among variables over time; it is not a forecasting workflow.",
-                "Use Cross-sectional for one observational slice; use Time-series econometrics when rows are ordered observations of the same system over time."
+                "Use Cross-sectional for one observational slice; use Time-series econometrics when rows are ordered observations of the same system over time; use Panel for repeated individuals with explicit individual and period indexes."
               ),
-              choices = c("Cross-sectional econometrics" = "cross_section", "Time-series econometrics" = "time_series"),
+              choices = c("Cross-sectional econometrics" = "cross_section", "Time-series econometrics" = "time_series", "Panel data econometrics" = "panel"),
               selected = initial_mode
             ),
             shiny::uiOutput("structure_hint"),
@@ -52,6 +52,14 @@
             ),
             shiny::uiOutput("type_override_status"),
             shiny::uiOutput("time_index_ui"),
+            shiny::conditionalPanel(
+              condition = "input.analysis_mode == 'panel'",
+              shiny::selectInput("panel_id", "Individual identifier", choices = c("Choose..." = "", all_vars)),
+              shiny::selectInput("panel_time", "Time / period identifier", choices = c("Choose..." = "", all_vars)),
+              shiny::selectInput("panel_outcome", "Panel outcome", choices = c("Continuous" = "continuous", "Binary (numeric 0/1; 1 = event)" = "binary", "Count (non-negative integers)" = "count"), selected = "continuous"),
+              shiny::uiOutput("panel_audit_ui"),
+              shiny::p(class = "ec-help", "Static panel models with an explicitly chosen outcome family. Select both indexes explicitly; no automatic aggregation or imputation.")
+            ),
             shiny::selectInput(
               "y",
               .ec_labeled(

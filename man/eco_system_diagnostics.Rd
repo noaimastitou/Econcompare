@@ -7,4 +7,5 @@
 \item{serial_lags}{Lag order for the multivariate Portmanteau residual-autocorrelation test.}
 }
 \value{A list containing companion-root information and a residual serial-correlation table.}
+\details{The horizon must exceed the fitted VAR lag order and be smaller than the residual sample size. The serial-correlation table includes degrees of freedom in \code{df}. Unavailable diagnostics have an explanatory note.}
 \description{Provides a compact system-level diagnostic layer. The stationary-VAR root rule is not mechanically applied to a cointegrated VECM.}

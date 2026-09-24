@@ -1,10 +1,10 @@
 Package: econcompare
 Type: Package
-Title: Econometric Model Comparison for Cross-Sectional and Time-Series Data
-Version: 0.11.0
+Title: Econometric Model Comparison for Cross-Sectional, Time-Series and Panel Data
+Version: 0.14.4
 Authors@R: person("Noaïm", "ASTITOU", role = c("aut", "cre"), email = "noaimastitou.pro@gmail.com")
 Description: A research-software toolkit for exploring and comparing econometric models
-    across cross-sectional and explanatory time-series settings. Cross-sectional models are
+    across cross-sectional, explanatory time-series and static panel settings. Cross-sectional models are
     grouped by dependent-variable objective. Time-series tools conservatively detect and audit
     temporal indices, distinguish calendar gaps from observation ordering, and support static temporal regression, distributed lags, dynamic
     regression, ARDL-style finite lag specifications, single-equation error-correction models,
@@ -30,10 +30,13 @@ Suggests:
     quantreg,
     rstudioapi,
     sampleSelection,
+    survival,
     shiny,
     sandwich,
     tseries,
     urca,
     vars,
-    testthat (>= 3.0.0)
+    tibble,
+    plm,
+    testthat (>= 3.2.0)
 Config/testthat/edition: 3

@@ -12,6 +12,7 @@
 #' @return A data.frame with diagnostic statistics, p-values, interpretation and details.
 #' @export
 eco_diagnostics <- function(x, alpha = 0.05, models = NULL, tests = NULL) {
+  if (inherits(x, "econcompare_panel")) .ec_stop("Use eco_panel_diagnostics() for panel models; cross-sectional tests are not substituted automatically.")
   if (!inherits(x, "econcompare")) .ec_stop("`x` must be an econcompare object.")
   if (length(alpha) != 1L || !is.finite(alpha) || alpha <= 0 || alpha >= 1) .ec_stop("`alpha` must be a single number strictly between 0 and 1.")
 
