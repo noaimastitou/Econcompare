@@ -1,3 +1,5 @@
+<img width="1850" height="952" alt="image" src="https://github.com/user-attachments/assets/bb8364b0-7d92-4974-b427-be0735c56ee5" />
+
 # econcompare
 
 **Outcome-aware econometric exploration for cross-sectional, explanatory time-series and panel data in R.**
