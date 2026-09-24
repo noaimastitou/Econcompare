@@ -51,21 +51,25 @@ publication date. Do not describe this source delivery as a certified release:
 R was unavailable in the preparation environment, so no R test suite or
 R CMD check result for 0.14.4 was obtained there.
 
-## Dépôt de ce dossier sur GitHub
+## Uploading this folder to GitHub
 
-Le contenu du dossier Econcompare doit être placé directement à la racine du
- dépôt noaimastitou/Econcompare : DESCRIPTION, R/, man/, inst/ et tests/ doivent
- y être directement visibles. Ne déposer ni le ZIP, ni un sous-dossier Econcompare
- à l'intérieur du dépôt. Conserver .github/, .Rbuildignore et .gitignore.
+The contents of the `Econcompare` folder should be placed directly at the root of the `noaimastitou/Econcompare` repository. Files and directories such as `DESCRIPTION`, `R/`, `man/`, `inst/`, and `tests/` should therefore be directly visible at the repository root.
 
-Le dossier contient plus de 100 fichiers : pour un dépôt depuis le navigateur,
-utiliser deux envois sur la même branche (d'abord R/, man/, inst/, tests/ ; puis
-les autres fichiers et .github/). GitHub Desktop permet de préparer un seul commit
-après copie de l'ensemble du contenu dans un clone local du dépôt.
+Do not upload the ZIP archive itself, and do not create an additional `Econcompare/` subdirectory inside the repository.
 
-Avant la release v0.14.4, exécuter les contrôles ci-dessus et vérifier Actions.
-Le code peut être déposé sur une branche de validation avant ces contrôles ; cela
-ne constitue pas une certification de stabilité ni une publication CRAN.
+Keep `.github/`, `.Rbuildignore`, and `.gitignore`.
 
-Référence pour le dépôt web :
+Because the folder contains more than 100 files, uploading through the GitHub web interface may require two uploads to the same branch. For example:
+
+1. Upload `R/`, `man/`, `inst/`, and `tests/`.
+2. Upload the remaining files together with `.github/`.
+
+Alternatively, GitHub Desktop can be used to clone the repository locally, copy the complete project contents into the clone, and prepare a single commit.
+
+Before releasing version `v0.14.4`, run the validation checks described above and verify the GitHub Actions results.
+
+The code may be pushed to a validation branch before those checks are completed. Doing so should not be interpreted as certification of stability or as a CRAN release.
+
+GitHub documentation for uploading files:
+
 https://docs.github.com/en/repositories/working-with-files/managing-files/adding-a-file-to-a-repository
