@@ -10,7 +10,7 @@ The package is intentionally **comparison-first rather than automation-first**. 
 
 ## Model groups
 
-Version 0.14.4 fixes help-bubble layering and temporal diagnostic selection resets, removes the panel Interpretation tab, and introduces model-by-model panel diagnostic controls. This is a source candidate; see [VALIDATION_0.14.4.md](VALIDATION_0.14.4.md) for validation limits.
+Version 0.14.4 fixes help-bubble layering and temporal diagnostic selection resets, removes the panel Interpretation tab, and introduces model-by-model panel diagnostic controls. 
 
 ### Continuous outcomes
 
